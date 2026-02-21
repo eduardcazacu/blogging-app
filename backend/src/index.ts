@@ -2,15 +2,23 @@ import { Hono } from 'hono'
 import { userRouter } from './route/user'
 import { blogRouter } from './route/blog'
 import { cors } from 'hono/cors'
+import { getConfig } from './env'
+import { ensureSchema } from './db'
+
 // Create the main Hono app
 const app = new Hono<{
 	Bindings: {
-		DATABASE_URL: string,
-		JWT_SECRET: string,
+		DATABASE_URL?: string,
+		JWT_SECRET?: string,
 	}
 }>();
 
 app.use('/*', cors())
+app.use('/*', async (c, next) => {
+	const { databaseUrl } = getConfig(c);
+	await ensureSchema(databaseUrl);
+	await next();
+});
 app.route("api/v1/user", userRouter)
 app.route("api/v1/blog", blogRouter)
 

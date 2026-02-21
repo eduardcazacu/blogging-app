@@ -1,13 +1,14 @@
 import axios from "axios";
 import { useEffect, useState } from "react"
 import { BACKEND_URL } from "../config";
+import { getAuthHeader } from "../lib/auth";
 
 export  interface Blog{
     "content": string;
     "title": string;
     "id": number;
     "author": {
-        "name": string
+        "name": string | null
     }
 }
 
@@ -19,14 +20,14 @@ export const useBlog = ({ id }: { id: string }) =>{
     useEffect(() => {
         axios.get(`${BACKEND_URL}/api/v1/blog/${id}`, {
             headers:{
-                Authorization: localStorage.getItem("token")
+                Authorization: getAuthHeader()
             }
         })
             .then(response => {
                 setBlog(response.data.blog);
                 setLoading(false)
             })
-    })
+    }, [id])
 
     return {
         loading,
@@ -41,14 +42,14 @@ export const useBlogs = () =>{
     useEffect(() => {
         axios.get(`${BACKEND_URL}/api/v1/blog/bulk`, {
             headers:{
-                Authorization: localStorage.getItem("token")
+                Authorization: getAuthHeader()
             }
         })
             .then(response => {
                 setBlogs(response.data.blogs);
                 setLoading(false)
             })
-    })
+    }, [])
 
     return {
         loading,

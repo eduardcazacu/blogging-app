@@ -3,6 +3,7 @@ import { Appbar } from "../components/Appbar"
 import { BACKEND_URL } from "../config"
 import { ChangeEvent, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { getAuthHeader } from "../lib/auth"
 
 export const Publish = () => {
     const [title, setTitle] = useState("");
@@ -28,7 +29,7 @@ export const Publish = () => {
                         
                     }, {
                         headers: {
-                            Authorization: localStorage.getItem("token")
+                            Authorization: getAuthHeader()
                         }
                     });
                     navigate(`/blog/${response.data.id}`)

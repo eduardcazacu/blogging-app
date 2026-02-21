@@ -2,25 +2,42 @@ import { ChangeEvent, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { BACKEND_URL } from "../config"
 import axios from "axios"
-import { SignupInput } from "@syedahmedullahjaser/zod-inference-medium-blog"
+import { SigninInput, SignupInput, signinInput, signupInput } from "@blogging-app/common"
+import { persistTokenFromResponse } from "../lib/auth"
 
 export const Auth = ({type}: {type: "signup" | "signin"}) => {
 
   const navigate = useNavigate();
-  const [postInputs, setPostInputs] = useState<SignupInput>({
+  const [postInputs, setPostInputs] = useState<SignupInput & SigninInput>({
     name: "",
     email: "",
     password: ""
   })
 
   async function sendRequest () {
+    const parsed = (type === "signup" ? signupInput : signinInput).safeParse(postInputs);
+    if (!parsed.success) {
+      alert("Please enter a valid email and password.");
+      return;
+    }
+
     try{
-      const response = await axios.post(`${BACKEND_URL}/api/v1/user/${type === "signup" ? "signup" : "signin"}`, postInputs);
-      const jwt = response.data;
-      localStorage.setItem("token", jwt);
+      const response = await axios.post(
+        `${BACKEND_URL}/api/v1/user/${type === "signup" ? "signup" : "signin"}`,
+        parsed.data
+      );
+      const jwt = persistTokenFromResponse(response.data);
+      if (!jwt) {
+        alert("Auth succeeded but token was missing in response.");
+        return;
+      }
       navigate("/blogs")
-    } catch (e){
-      alert("Error while signing up")
+    } catch (e: unknown){
+      if (axios.isAxiosError(e)) {
+        alert(e.response?.data?.msg || "Auth request failed");
+        return;
+      }
+      alert("Auth request failed");
     }
   }
 
@@ -41,14 +58,14 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
                 </Link>
             </div>
 
-            {type === "signup" ? <LabelledInput label="Name" placeholder="Syed Jaser" onChange={(e) =>{
+            {type === "signup" ? <LabelledInput label="Name" placeholder="Your name" onChange={(e) =>{
               setPostInputs({
                 ...postInputs,
                 name: e.target.value
               })
             }}/> : null}
 
-            <LabelledInput label="Username" placeholder="syedjaser" onChange={(e) =>{
+            <LabelledInput label="Email" placeholder="you@example.com" onChange={(e) =>{
               setPostInputs({
                 ...postInputs,
                 email: e.target.value

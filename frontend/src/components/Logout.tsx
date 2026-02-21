@@ -12,7 +12,7 @@ export const Logout = () => {
     // setIsLoggedin(true)
 
     const logout = () => {
-        // localStorage.removeItem("token");
+        localStorage.removeItem("token");
         // setIsLoggedin(false);
         navigate('/')
     };

@@ -1,19 +1,22 @@
 {
   "name": "backend",
   "scripts": {
-    "dev": "wrangler dev src/index.ts",
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
     "deploy": "wrangler deploy --minify src/index.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.15.1",
-    "@prisma/extension-accelerate": "^1.1.0",
-    "@syedahmedullahjaser/zod-inference-medium-blog": "^1.0.6",
+    "@blogging-app/common": "file:../common",
+    "@hono/node-server": "^1.13.1",
+    "dotenv": "^16.4.5",
     "hono": "^4.4.7",
-    "prisma": "^5.15.1",
+    "postgres": "^3.4.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240529.0",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
     "wrangler": "^3.57.2"
   }
 }

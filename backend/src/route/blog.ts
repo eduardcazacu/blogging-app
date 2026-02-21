@@ -1,38 +1,47 @@
 import { Hono } from "hono";
-import { PrismaClient } from '@prisma/client/edge'
-import { withAccelerate } from '@prisma/extension-accelerate'
 import { verify } from 'hono/jwt'
-import { createBlogInput, updateBlogInput } from "@syedahmedullahjaser/zod-inference-medium-blog";
+import { createBlogInput, updateBlogInput } from "@blogging-app/common";
+import { getConfig } from "../env";
+import { getDb } from "../db";
 
 export const blogRouter = new Hono<{
 	Bindings: {
-		DATABASE_URL: string,
-		JWT_SECRET: string,
+		DATABASE_URL?: string,
+		JWT_SECRET?: string,
 	},
     Variables: {
-        userId: string
+        userId: number
     }
 }>();
 
 blogRouter.use("/*", async (c, next) => {
-    const authHeader = c.req.header("Authorization") || ""
-    const user = await verify(authHeader, c.env.JWT_SECRET)
     try {
-        if(user){
-            //@ts-ignore
-            c.set("userId", user.id);
-            await next();
+        const authHeader = c.req.header("Authorization") || "";
+        const token = authHeader.startsWith("Bearer ")
+          ? authHeader.slice("Bearer ".length).trim()
+          : authHeader.trim();
+        if (!token) {
+          c.status(403);
+          return c.json({ msg: "Missing authorization token" });
+        }
+        const { jwtSecret } = getConfig(c);
+        const user = await verify(token, jwtSecret, "HS256");
+        const userId = Number(user?.id);
+        if(Number.isFinite(userId)){
+            c.set("userId", userId);
+            return await next();
         }
         else{
             c.status(403) //unauthorized
-            c.json({
-                msg: "You are not logged in"
+            return c.json({
+                msg: "Token payload is missing a valid user id"
             })
         }
     } catch(e){
         c.status(403) //unauthorized
-        c.json({
-            msg: "You are not logged in"
+        return c.json({
+            msg: "You are not logged in",
+            error: e instanceof Error ? e.message : "Invalid token"
         })
     }
     
@@ -48,17 +57,14 @@ blogRouter.use("/*", async (c, next) => {
         })
     }
     const authorId = c.get("userId")
-    const prisma = new PrismaClient({
-		datasourceUrl: c.env?.DATABASE_URL,
-	}).$extends(withAccelerate());
-
-    const blog = await prisma.post.create({
-        data:{
-            title: body.title,
-            content: body.content,
-            authorId: authorId
-        }
-    })
+    const { databaseUrl } = getConfig(c);
+    const db = getDb(databaseUrl);
+    const posts = await db<{ id: number }[]>`
+      INSERT INTO posts (title, content, author_id)
+      VALUES (${body.title}, ${body.content}, ${authorId})
+      RETURNING id
+    `;
+    const blog = posts[0];
         return c.json({
             id: blog.id
         })
@@ -73,20 +79,22 @@ blogRouter.use("/*", async (c, next) => {
             msg: "Inputs are Incorrect"
         })
     }
-    const prisma = new PrismaClient({
-		datasourceUrl: c.env?.DATABASE_URL,
-	}).$extends(withAccelerate());
-
-    const blog = await prisma.post.update({
-        where: {
-            id: body.id
-        },
-
-        data:{
-            title: body.title,
-            content: body.content,
-        }
-    })
+    const authorId = c.get("userId")
+    const { databaseUrl } = getConfig(c);
+    const db = getDb(databaseUrl);
+    const posts = await db<{ id: number }[]>`
+      UPDATE posts
+      SET title = ${body.title}, content = ${body.content}
+      WHERE id = ${body.id} AND author_id = ${authorId}
+      RETURNING id
+    `;
+    const blog = posts[0];
+    if (!blog) {
+      c.status(404);
+      return c.json({
+        msg: "Blog not found"
+      });
+    }
         return c.json({
             id: blog.id
         })
@@ -94,60 +102,76 @@ blogRouter.use("/*", async (c, next) => {
 
     //TODO pagination
     blogRouter.get('/bulk',async (c) => {
-        const prisma = new PrismaClient({
-            datasourceUrl: c.env?.DATABASE_URL, 
-        }).$extends(withAccelerate());
-        const blogs = await prisma.post.findMany({
-            select:{
-                content: true,
-                title: true,
-                id: true,
-                author: {
-                    select: {
-                        name: true
-                    }
-                }
-               
-            }
-        });
+        const { databaseUrl } = getConfig(c);
+        const db = getDb(databaseUrl);
+        const blogs = await db<{
+          content: string;
+          title: string;
+          id: number;
+          author_name: string | null;
+        }[]>`
+          SELECT p.id, p.title, p.content, u.name AS author_name
+          FROM posts p
+          INNER JOIN users u ON u.id = p.author_id
+          ORDER BY p.id DESC
+        `;
 
         return c.json({
-            blogs
+            blogs: blogs.map((blog) => ({
+              id: blog.id,
+              title: blog.title,
+              content: blog.content,
+              author: {
+                name: blog.author_name
+              }
+            }))
         })
     })
   
   blogRouter.get('/:id',async (c) => {
-    const id = c.req.param("id")
-    // const body = await c.req.json()
-    const prisma = new PrismaClient({
-		datasourceUrl: c.env?.DATABASE_URL,
-	}).$extends(withAccelerate());
+    const id = Number(c.req.param("id"))
+    if (!Number.isFinite(id)) {
+      c.status(400);
+      return c.json({ msg: "Invalid blog id" });
+    }
+    const { databaseUrl } = getConfig(c);
+    const db = getDb(databaseUrl);
 
     try {
-    const blog = await prisma.post.findFirst({
-        where: {
-            id: id
-        },
-        select: {
-            id: true,
-            title: true,
-            content: true,
-            author: {
-                select: {
-                    name: true
-                }
-            }
-        }
-    })
+    const blogs = await db<{
+      id: number;
+      title: string;
+      content: string;
+      author_name: string | null;
+    }[]>`
+      SELECT p.id, p.title, p.content, u.name AS author_name
+      FROM posts p
+      INNER JOIN users u ON u.id = p.author_id
+      WHERE p.id = ${id}
+      LIMIT 1
+    `;
+    const blog = blogs[0];
+    if (!blog) {
+      c.status(404);
+      return c.json({
+        msg: "Blog not found"
+      });
+    }
         return c.json({
-            blog
+            blog: {
+              id: blog.id,
+              title: blog.title,
+              content: blog.content,
+              author: {
+                name: blog.author_name
+              }
+            }
         });
     } catch(e){
+        console.error(e);
         c.status(411);
         return c.json({
             msg: "Error while fecthing the blog post"
         })
     }
 })
-
-
