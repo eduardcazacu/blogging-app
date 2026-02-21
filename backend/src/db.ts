@@ -28,8 +28,14 @@ export async function ensureSchema(databaseUrl: string) {
       id SERIAL PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
       name TEXT,
+      bio TEXT NOT NULL DEFAULT '',
       password TEXT NOT NULL
     )
+  `;
+
+  await sql`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT ''
   `;
 
   await sql`

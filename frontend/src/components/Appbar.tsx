@@ -28,7 +28,9 @@ export const Appbar = () => {
             New Post
           </button>
         </Link>
-        <Avatar size={"big"} name={displayName}/>
+        <Link to={"/account"} className="cursor-pointer" aria-label="Account">
+          <Avatar size={"big"} name={displayName}/>
+        </Link>
         <Logout />
       </div>
       
