@@ -12,8 +12,8 @@ export const Publish = () => {
 
   return (
     <div><Appbar />
-        <div className="flex justify-center w-full pt-8">
-            <div className="max-w-screen-lg w-full">
+        <div className="flex justify-center w-full px-4 pt-6 sm:px-6 sm:pt-8">
+            <div className="max-w-screen-lg w-full rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
                 {/* <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Title</label> */}
                 <input onChange={(e) => {
                     setTitle(e.target.value)
@@ -51,7 +51,7 @@ function TextEditor({ onChange }: { onChange: (e: ChangeEvent<HTMLTextAreaElemen
        
         <div className="my-2 bg-white rounded-b-lg w-full">
             <label  className="sr-only">Publish post</label>
-            <textarea onChange={onChange} id="editor" rows={8} className="block w-full px-0 text-sm focus-outline-none text-gray-800 bg-white border-0  " placeholder="Write a blog..." required ></textarea>
+            <textarea onChange={onChange} id="editor" rows={8} className="block w-full px-0 text-sm focus-outline-none text-gray-800 bg-white border-0  " placeholder="Write a post..." required ></textarea>
         </div>
    </div>
    

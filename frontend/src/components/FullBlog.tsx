@@ -2,32 +2,44 @@ import { Blog } from "../hooks";
 import { Appbar } from "./Appbar";
 import { Avatar } from "./BlogCard";
 
+function formatPublishedDate(dateIso: string) {
+  const date = new Date(dateIso);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown date";
+  }
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 export const FullBlog = ({ blog }: { blog: Blog }) => {
   return (
     <div>
       <Appbar />
-      <div className="flex justify-center">
-        <div className="grid grid-cols-12 w-full px-10 pt-20 max-w-screen-xl ">
-          <div className="col-span-8">
+      <div className="flex justify-center px-4 py-6 sm:px-6 sm:py-8">
+        <div className="grid grid-cols-12 w-full max-w-screen-xl gap-8 rounded-xl border border-slate-200 bg-white p-5 sm:p-8">
+          <div className="col-span-12 md:col-span-8">
             <div className="text-3xl font-extrabold">{blog.title}</div>
-            <div className="text-slate-500 pt-3">Posten on 23rd June 2023</div>
-            <div className="">{blog.content}</div>
+            <div className="text-slate-500 pt-3">Posted on {formatPublishedDate(blog.createdAt)}</div>
+            <div className="pt-4 leading-7">{blog.content}</div>
           </div>
 
-          <div className="col-span-4">
+          <div className="col-span-11 md:col-span-4">
             <div className="text-slate-600 text-lg">
                 Author
             </div>
             
-            <div className="flex">
-                <div className="pr-4 flex flex-col justify-center">
-                <Avatar size={"small"} name={blog.author.name || "Anonymous"}/>
-                </div>
-              <div>
-                <div className="text-xl font-bold">
+            <div className="flex min-w-0 items-start gap-2 sm:gap-3">
+              <div className="shrink-0 flex flex-col justify-start pt-1">
+              <Avatar size={"small"} name={blog.author.name || "Anonymous"} />
+              </div>
+              <div className="min-w-0 flex-1 pr-1">§
+                <div className="text-lg sm:text-xl font-bold leading-tight break-words">
                   {blog.author.name || "Anonymous"}
                 </div>
-                <div className="pt-2 text-slate-500">
+                <div className="pt-2 text-slate-500 leading-6 break-words">
                   Random catch phrase about the author's ability to grab the
                   user's attention
                 </div>

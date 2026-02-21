@@ -3,6 +3,18 @@ import { BlogCard } from "../components/BlogCard"
 import { BlogSkeleton } from "../components/BlogSkeleton";
 import { useBlogs } from "../hooks"
 
+function formatPublishedDate(dateIso: string) {
+  const date = new Date(dateIso);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown date";
+  }
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export const Blogs = () => {
 
   const {loading, blogs} = useBlogs();
@@ -37,7 +49,7 @@ export const Blogs = () => {
          authorname ={blog.author.name || "Anonymous"}
          title={blog.title}
          content={blog.content}
-         publishedDate={"23rd June"} />) }
+         publishedDate={formatPublishedDate(blog.createdAt)} />) }
         
        
       </div>

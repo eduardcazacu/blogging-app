@@ -109,8 +109,9 @@ blogRouter.use("/*", async (c, next) => {
           title: string;
           id: number;
           author_name: string | null;
+          created_at: Date;
         }[]>`
-          SELECT p.id, p.title, p.content, u.name AS author_name
+          SELECT p.id, p.title, p.content, p.created_at, u.name AS author_name
           FROM posts p
           INNER JOIN users u ON u.id = p.author_id
           ORDER BY p.id DESC
@@ -121,6 +122,7 @@ blogRouter.use("/*", async (c, next) => {
               id: blog.id,
               title: blog.title,
               content: blog.content,
+              createdAt: blog.created_at.toISOString(),
               author: {
                 name: blog.author_name
               }
@@ -143,8 +145,9 @@ blogRouter.use("/*", async (c, next) => {
       title: string;
       content: string;
       author_name: string | null;
+      created_at: Date;
     }[]>`
-      SELECT p.id, p.title, p.content, u.name AS author_name
+      SELECT p.id, p.title, p.content, p.created_at, u.name AS author_name
       FROM posts p
       INNER JOIN users u ON u.id = p.author_id
       WHERE p.id = ${id}
@@ -162,6 +165,7 @@ blogRouter.use("/*", async (c, next) => {
               id: blog.id,
               title: blog.title,
               content: blog.content,
+              createdAt: blog.created_at.toISOString(),
               author: {
                 name: blog.author_name
               }

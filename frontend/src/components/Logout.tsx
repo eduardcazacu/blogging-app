@@ -13,6 +13,7 @@ export const Logout = () => {
 
     const logout = () => {
         localStorage.removeItem("token");
+        localStorage.removeItem("displayName");
         // setIsLoggedin(false);
         navigate('/')
     };
@@ -29,7 +30,7 @@ export const Logout = () => {
         //    }}
         onClick={logout}
            type="button"
-            className="ml-4 text-gray-900 bg-white border border-gray-300 focus:outline-none hover:bg-gray-100 focus:ring-4 focus:ring-gray-100 font-medium rounded-full text-sm px-5 py-2.5 me-2 mb-2"
+            className="text-gray-900 bg-white border border-gray-300 focus:outline-none hover:bg-gray-100 focus:ring-4 focus:ring-gray-100 font-medium rounded-full text-xs px-3 py-2 sm:text-sm sm:px-5 sm:py-2.5"
           >
            Logout
           </button>

@@ -38,8 +38,14 @@ export async function ensureSchema(databaseUrl: string) {
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       published BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
     )
+  `;
+
+  await sql`
+    ALTER TABLE posts
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `;
 
   initialized.add(databaseUrl);

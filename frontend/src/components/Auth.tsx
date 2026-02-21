@@ -1,6 +1,6 @@
 import { ChangeEvent, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { BACKEND_URL } from "../config"
+import { APP_NAME, BACKEND_URL } from "../config"
 import axios from "axios"
 import { SigninInput, SignupInput, signinInput, signupInput } from "@blogging-app/common"
 import { persistTokenFromResponse } from "../lib/auth"
@@ -31,6 +31,11 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
         alert("Auth succeeded but token was missing in response.");
         return;
       }
+      const displayName =
+        (parsed.data.name && parsed.data.name.trim()) ||
+        parsed.data.email.trim() ||
+        "User";
+      localStorage.setItem("displayName", displayName);
       navigate("/blogs")
     } catch (e: unknown){
       if (axios.isAxiosError(e)) {
@@ -46,7 +51,7 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
         <div className="flex justify-center">
           <div>
             <div className="text-4xl font-extrabold pb-2">
-            Welcome to Medium! <br />
+            Welcome to {APP_NAME}! <br />
             </div>
             <div className="text-3xl font-extrabold ">
             Create an account
