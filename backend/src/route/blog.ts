@@ -47,6 +47,59 @@ blogRouter.use("/*", async (c, next) => {
     
 });
 
+blogRouter.post('/:id/comments', async (c) => {
+    const postId = Number(c.req.param("id"));
+    if (!Number.isFinite(postId)) {
+      c.status(400);
+      return c.json({ msg: "Invalid blog id" });
+    }
+
+    const body = await c.req.json();
+    const content = typeof body?.content === "string" ? body.content.trim() : "";
+    if (!content) {
+      c.status(400);
+      return c.json({ msg: "Comment content is required" });
+    }
+
+    const authorId = c.get("userId");
+    const { databaseUrl } = getConfig(c);
+    const db = getDb(databaseUrl);
+
+    try {
+      const comments = await db<{
+        id: number;
+        content: string;
+        created_at: Date;
+        author_name: string | null;
+      }[]>`
+        INSERT INTO comments (content, post_id, author_id)
+        VALUES (${content}, ${postId}, ${authorId})
+        RETURNING id, content, created_at,
+          (SELECT name FROM users WHERE id = ${authorId}) AS author_name
+      `;
+      const comment = comments[0];
+      return c.json({
+        comment: {
+          id: comment.id,
+          content: comment.content,
+          createdAt: comment.created_at.toISOString(),
+          author: {
+            name: comment.author_name
+          }
+        }
+      });
+    } catch (e: unknown) {
+      const code = (e as { code?: string })?.code;
+      if (code === "23503") {
+        c.status(404);
+        return c.json({ msg: "Blog not found" });
+      }
+      console.error(e);
+      c.status(500);
+      return c.json({ msg: "Failed to create comment" });
+    }
+});
+
   blogRouter.post('/',async (c) => {
     const body = await c.req.json()
     const { success } = createBlogInput.safeParse(body)
@@ -104,22 +157,44 @@ blogRouter.use("/*", async (c, next) => {
     blogRouter.get('/bulk',async (c) => {
         const { databaseUrl } = getConfig(c);
         const db = getDb(databaseUrl);
-        const blogs = await db<{
+        const blogRows = await db<{
           content: string;
           title: string;
           id: number;
           author_name: string | null;
           author_bio: string;
+          comment_count: string | number;
           created_at: Date;
         }[]>`
-          SELECT p.id, p.title, p.content, p.created_at, u.name AS author_name, u.bio AS author_bio
+          SELECT
+            p.id,
+            p.title,
+            p.content,
+            p.created_at,
+            u.name AS author_name,
+            u.bio AS author_bio,
+            (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count
           FROM posts p
           INNER JOIN users u ON u.id = p.author_id
           ORDER BY p.id DESC
         `;
 
-        return c.json({
-            blogs: blogs.map((blog) => ({
+        const blogs = await Promise.all(
+          blogRows.map(async (blog) => {
+            const comments = await db<{
+              id: number;
+              content: string;
+              created_at: Date;
+              author_name: string | null;
+            }[]>`
+              SELECT c.id, c.content, c.created_at, u.name AS author_name
+              FROM comments c
+              INNER JOIN users u ON u.id = c.author_id
+              WHERE c.post_id = ${blog.id}
+              ORDER BY c.created_at ASC
+              LIMIT 3
+            `;
+            return {
               id: blog.id,
               title: blog.title,
               content: blog.content,
@@ -127,8 +202,22 @@ blogRouter.use("/*", async (c, next) => {
               author: {
                 name: blog.author_name,
                 bio: blog.author_bio
-              }
-            }))
+              },
+              commentCount: Number(blog.comment_count),
+              topComments: comments.map((comment) => ({
+                id: comment.id,
+                content: comment.content,
+                createdAt: comment.created_at.toISOString(),
+                author: {
+                  name: comment.author_name
+                }
+              }))
+            };
+          })
+        );
+
+        return c.json({
+            blogs
         })
     })
   
@@ -163,6 +252,18 @@ blogRouter.use("/*", async (c, next) => {
         msg: "Blog not found"
       });
     }
+    const comments = await db<{
+      id: number;
+      content: string;
+      created_at: Date;
+      author_name: string | null;
+    }[]>`
+      SELECT c.id, c.content, c.created_at, u.name AS author_name
+      FROM comments c
+      INNER JOIN users u ON u.id = c.author_id
+      WHERE c.post_id = ${id}
+      ORDER BY c.created_at ASC
+    `;
         return c.json({
             blog: {
               id: blog.id,
@@ -172,7 +273,15 @@ blogRouter.use("/*", async (c, next) => {
               author: {
                 name: blog.author_name,
                 bio: blog.author_bio
-              }
+              },
+              comments: comments.map((comment) => ({
+                id: comment.id,
+                content: comment.content,
+                createdAt: comment.created_at.toISOString(),
+                author: {
+                  name: comment.author_name
+                }
+              }))
             }
         });
     } catch(e){

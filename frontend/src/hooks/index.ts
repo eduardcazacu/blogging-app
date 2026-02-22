@@ -3,11 +3,23 @@ import { useEffect, useState } from "react"
 import { BACKEND_URL } from "../config";
 import { getAuthHeader } from "../lib/auth";
 
+export interface Comment {
+    id: number;
+    content: string;
+    createdAt: string;
+    author: {
+        name: string | null;
+    };
+}
+
 export  interface Blog{
     "content": string;
     "title": string;
     "id": number;
     "createdAt": string;
+    "commentCount"?: number;
+    "comments"?: Comment[];
+    "topComments"?: Comment[];
     "author": {
         "name": string | null;
         "bio": string;

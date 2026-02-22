@@ -42,14 +42,16 @@ export const Blogs = () => {
   return (
     <div>
        <Appbar />
-      <div  className="flex justify-center">
-        <div className="">
+      <div className="flex justify-center px-4 py-6 sm:px-6 sm:py-8">
+        <div className="w-full max-w-screen-md space-y-4">
         {blogs.map(blog => <BlogCard 
          id={blog.id}
          authorname ={blog.author.name || "Anonymous"}
          title={blog.title}
          content={blog.content}
-         publishedDate={formatPublishedDate(blog.createdAt)} />) }
+         publishedDate={formatPublishedDate(blog.createdAt)}
+         commentCount={blog.commentCount || 0}
+         topComments={blog.topComments || []} />) }
         
        
       </div>

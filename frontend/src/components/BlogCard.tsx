@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
+import { Comment } from "../hooks";
 
 interface BlogCardProps{
     authorname: string;
@@ -6,6 +7,8 @@ interface BlogCardProps{
     content: string;
     publishedDate: string;
     id: number;
+    topComments?: Comment[];
+    commentCount?: number;
 }
 
 export const BlogCard = ({
@@ -13,11 +16,24 @@ export const BlogCard = ({
     title,
     content,
     publishedDate,
-    id
+    id,
+    topComments = [],
+    commentCount = 0
 }: BlogCardProps) => {
+  const navigate = useNavigate();
+
   return ( 
-  <Link to={`/blog/${id}`}>
-  <div className="p-4 border-b border-slate-300 pb-4 w-screen max-w-screen-md cursor-pointer">
+  <div
+    className="rounded-xl border border-slate-200 bg-white p-5 w-full max-w-screen-md cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+    onClick={() => navigate(`/blog/${id}`)}
+    role="link"
+    tabIndex={0}
+    onKeyDown={(e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        navigate(`/blog/${id}`);
+      }
+    }}
+  >
         <div className="flex">
             <div className="">
             <Avatar size={"small"} name={authorname}/> 
@@ -41,9 +57,38 @@ export const BlogCard = ({
         <div className="text-slate-400 text-sm pt-4">
             {`${Math.ceil(content.length / 100)} minutes(s) read`}
         </div>
+        {topComments.length > 0 ? (
+          <div className="mt-4 border-t border-slate-200 pt-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Comments
+            </div>
+            <div className="mt-2 space-y-2">
+              {topComments.map((comment) => (
+                <div key={comment.id} className="rounded-md bg-slate-50 p-2">
+                  <div className="text-xs font-medium text-slate-700">
+                    {comment.author.name || "Anonymous"}
+                  </div>
+                  <div className="text-sm text-slate-600 break-words">
+                    {comment.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {commentCount > 3 ? (
+              <div className="mt-2">
+                <Link
+                  to={`/blog/${id}#comments`}
+                  className="text-sm font-medium text-blue-700 hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {`View all ${commentCount} comments`}
+                </Link>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
     
     </div>
-  </Link>
     
   )
 }
