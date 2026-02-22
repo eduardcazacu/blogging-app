@@ -1,5 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom"
 import { Comment } from "../hooks";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface BlogCardProps{
     authorname: string;
@@ -21,9 +24,26 @@ export const BlogCard = ({
     commentCount = 0
 }: BlogCardProps) => {
   const navigate = useNavigate();
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
   const estimatedReadMinutes = Math.max(1, Math.ceil(wordCount / 225));
   const showReadTime = estimatedReadMinutes > 2;
+
+  useEffect(() => {
+    const checkOverflow = () => {
+      const el = previewRef.current;
+      if (!el) {
+        setHasOverflow(false);
+        return;
+      }
+      setHasOverflow(el.scrollHeight > el.clientHeight + 1);
+    };
+
+    checkOverflow();
+    window.addEventListener("resize", checkOverflow);
+    return () => window.removeEventListener("resize", checkOverflow);
+  }, [content]);
 
   return ( 
   <div
@@ -54,8 +74,15 @@ export const BlogCard = ({
         <div className="text-2xl font-semibold pt-2">
             {title}
         </div>
-        <div className="text-ms font-thin">
-            {content.slice(0,100)+"..."}
+        <div className="relative">
+          <div ref={previewRef} className="markdown-body text-sm font-thin max-h-24 overflow-hidden">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {content}
+              </ReactMarkdown>
+          </div>
+          {hasOverflow ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-b from-transparent to-white" />
+          ) : null}
         </div>
         {showReadTime ? (
           <div className="text-slate-400 text-sm pt-4">
