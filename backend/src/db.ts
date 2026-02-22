@@ -29,6 +29,9 @@ export async function ensureSchema(databaseUrl: string) {
       email TEXT UNIQUE NOT NULL,
       name TEXT,
       bio TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'approved',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       password TEXT NOT NULL
     )
   `;
@@ -36,6 +39,21 @@ export async function ensureSchema(databaseUrl: string) {
   await sql`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT ''
+  `;
+
+  await sql`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved'
+  `;
+
+  await sql`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `;
+
+  await sql`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL
   `;
 
   await sql`

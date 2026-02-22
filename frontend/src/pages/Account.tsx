@@ -11,6 +11,7 @@ type Profile = {
   email: string;
   name: string | null;
   bio: string;
+  isAdmin: boolean;
 };
 
 export const Account = () => {
@@ -32,6 +33,11 @@ export const Account = () => {
         const user = response.data?.user as Profile;
         setProfile(user);
         setBio(user?.bio ?? "");
+        localStorage.setItem("userEmail", user.email.toLowerCase());
+        localStorage.setItem("isAdmin", user.isAdmin ? "true" : "false");
+        if (user.name?.trim()) {
+          localStorage.setItem("displayName", user.name.trim());
+        }
       } catch (e) {
         if (axios.isAxiosError(e)) {
           setError(e.response?.data?.msg || "Failed to load account");

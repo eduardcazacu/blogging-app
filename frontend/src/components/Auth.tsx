@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { APP_NAME, BACKEND_URL } from "../config"
 import axios from "axios"
 import { SigninInput, SignupInput, signinInput, signupInput } from "@blogging-app/common"
-import { persistTokenFromResponse } from "../lib/auth"
+import { getAuthHeader, persistTokenFromResponse } from "../lib/auth"
 
 export const Auth = ({type}: {type: "signup" | "signin"}) => {
 
@@ -26,16 +26,30 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
         `${BACKEND_URL}/api/v1/user/${type === "signup" ? "signup" : "signin"}`,
         parsed.data
       );
+      if (type === "signup") {
+        alert(response.data?.msg || "Signup request sent. Wait for admin approval.");
+        navigate("/signin");
+        return;
+      }
+
       const jwt = persistTokenFromResponse(response.data);
       if (!jwt) {
         alert("Auth succeeded but token was missing in response.");
         return;
       }
+      const me = await axios.get(`${BACKEND_URL}/api/v1/user/me`, {
+        headers: {
+          Authorization: getAuthHeader(),
+        },
+      });
+      const profile = me.data?.user as { name?: string | null; email?: string; isAdmin?: boolean };
       const displayName =
-        (parsed.data.name && parsed.data.name.trim()) ||
-        parsed.data.email.trim() ||
+        (profile?.name && profile.name.trim()) ||
+        profile?.email?.trim() ||
         "User";
       localStorage.setItem("displayName", displayName);
+      localStorage.setItem("userEmail", (profile?.email || parsed.data.email).trim().toLowerCase());
+      localStorage.setItem("isAdmin", profile?.isAdmin ? "true" : "false");
       navigate("/blogs")
     } catch (e: unknown){
       if (axios.isAxiosError(e)) {

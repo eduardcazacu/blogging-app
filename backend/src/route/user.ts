@@ -3,11 +3,13 @@ import { sign, verify } from "hono/jwt";
 import { signinInput, signupInput } from "@blogging-app/common";
 import { getConfig } from "../env";
 import { getDb } from "../db";
+import { getAdminEmails, isAdminEmail } from "../admin-config";
 
 type UserRouteEnv = {
 	Bindings: {
 		DATABASE_URL?: string,
 		JWT_SECRET?: string,
+		ADMIN_EMAILS?: string,
 	},
 	Variables: {
 		userId: number
@@ -58,18 +60,29 @@ userRouter.post('/signup', async (c) => {
 				errors: parsed.error.flatten()
 			})
 		}
-		const { databaseUrl, jwtSecret } = getConfig(c);
+		const { databaseUrl } = getConfig(c);
 		const db = getDb(databaseUrl);
+		const adminEmails = getAdminEmails(c);
+		const requestedStatus = isAdminEmail(parsed.data.email, adminEmails)
+			? "approved"
+			: "pending";
 
 		const users = await db<{ id: number }[]>`
-      INSERT INTO users (email, password, name)
-      VALUES (${parsed.data.email}, ${parsed.data.password}, ${parsed.data.name ?? null})
+      INSERT INTO users (email, password, name, status)
+      VALUES (${parsed.data.email}, ${parsed.data.password}, ${parsed.data.name ?? null}, ${requestedStatus})
       RETURNING id
     `;
 		const user = users[0];
-
-    const jwt = await sign({ id: user.id }, jwtSecret, "HS256")
-    return c.text(jwt);
+		if (requestedStatus === "approved") {
+			return c.json({
+				msg: "Admin account created and approved.",
+				userId: user.id
+			});
+		}
+		return c.json({
+			msg: "Account request submitted. An admin must approve your account before you can sign in.",
+			userId: user.id
+		});
 	
   } catch(e: unknown) {
 		console.error(e);
@@ -98,8 +111,8 @@ userRouter.post('/signin', async (c) => {
 		const { databaseUrl, jwtSecret } = getConfig(c);
 		const db = getDb(databaseUrl);
 
-		const users = await db<{ id: number }[]>`
-      SELECT id
+		const users = await db<{ id: number; status: string }[]>`
+      SELECT id, status
       FROM users
       WHERE email = ${parsed.data.email} AND password = ${parsed.data.password}
       LIMIT 1
@@ -109,6 +122,11 @@ userRouter.post('/signin', async (c) => {
 		if (!user) {
 			c.status(403); //unauthorised
 			return c.json({ msg: "Incorrect credentials" });
+		}
+
+		if (user.status !== "approved") {
+			c.status(403);
+			return c.json({ msg: "Your account is pending admin approval." });
 		}
 	
 		const jwt = await sign({ id: user.id }, jwtSecret, "HS256");
@@ -143,7 +161,8 @@ userRouter.get("/me", async (c) => {
 			c.status(404);
 			return c.json({ msg: "User not found" });
 		}
-		return c.json({ user });
+		const isAdmin = isAdminEmail(user.email, getAdminEmails(c));
+		return c.json({ user: { ...user, isAdmin } });
 	} catch (e) {
 		console.error(e);
 		c.status(500);
