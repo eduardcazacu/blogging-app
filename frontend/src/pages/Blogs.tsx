@@ -34,6 +34,7 @@ export const Blogs = () => {
       <div className="flex justify-center px-4 py-6 sm:px-6 sm:py-8">
         <div className="w-full max-w-screen-md space-y-4">
         {blogs.map(blog => <BlogCard 
+         key={blog.id}
          id={blog.id}
          authorname ={blog.author.name || "Anonymous"}
          title={blog.title}
