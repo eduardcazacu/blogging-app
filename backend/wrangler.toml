@@ -1,5 +1,6 @@
-name = "backend"
-compatibility_date = "2023-12-01"
+name = "lounge-backend"
+compatibility_date = "2026-02-08"
+compatibility_flags = ["nodejs_compat"]
 
 # [[kv_namespaces]]
 # binding = "MY_KV_NAMESPACE"

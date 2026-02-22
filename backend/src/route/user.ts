@@ -1,9 +1,10 @@
 import { Hono, type Context, type Next } from "hono";
+import { Prisma } from "@prisma/client";
 import { sign, verify } from "hono/jwt";
 import { signinInput, signupInput } from "@blogging-app/common";
 import { getConfig } from "../env";
-import { getDb } from "../db";
 import { getAdminEmails, isAdminEmail } from "../admin-config";
+import { getPrismaClient } from "../prisma";
 
 type UserRouteEnv = {
 	Bindings: {
@@ -60,19 +61,24 @@ userRouter.post('/signup', async (c) => {
 				errors: parsed.error.flatten()
 			})
 		}
-		const { databaseUrl } = getConfig(c);
-		const db = getDb(databaseUrl);
 		const adminEmails = getAdminEmails(c);
+		const { databaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
 		const requestedStatus = isAdminEmail(parsed.data.email, adminEmails)
 			? "approved"
 			: "pending";
 
-		const users = await db<{ id: number }[]>`
-      INSERT INTO users (email, password, name, status)
-      VALUES (${parsed.data.email}, ${parsed.data.password}, ${parsed.data.name ?? null}, ${requestedStatus})
-      RETURNING id
-    `;
-		const user = users[0];
+		const user = await prisma.user.create({
+			data: {
+				email: parsed.data.email,
+				password: parsed.data.password,
+				name: parsed.data.name ?? null,
+				status: requestedStatus
+			},
+			select: {
+				id: true
+			}
+		});
 		if (requestedStatus === "approved") {
 			return c.json({
 				msg: "Admin account created and approved.",
@@ -86,8 +92,7 @@ userRouter.post('/signup', async (c) => {
 	
   } catch(e: unknown) {
 		console.error(e);
-		const code = (e as { code?: string })?.code;
-		if (code === "23505") {
+		if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
 			c.status(409);
 			return c.json({ msg: "Email already exists" });
 		}
@@ -109,15 +114,18 @@ userRouter.post('/signin', async (c) => {
 			})
 		}
 		const { databaseUrl, jwtSecret } = getConfig(c);
-		const db = getDb(databaseUrl);
+		const prisma = getPrismaClient(databaseUrl);
 
-		const users = await db<{ id: number; status: string }[]>`
-      SELECT id, status
-      FROM users
-      WHERE email = ${parsed.data.email} AND password = ${parsed.data.password}
-      LIMIT 1
-    `;
-		const user = users[0];
+		const user = await prisma.user.findFirst({
+			where: {
+				email: parsed.data.email,
+				password: parsed.data.password
+			},
+			select: {
+				id: true,
+				status: true
+			}
+		});
 	
 		if (!user) {
 			c.status(403); //unauthorised
@@ -143,20 +151,19 @@ userRouter.post('/signin', async (c) => {
 userRouter.get("/me", async (c) => {
 	try {
 		const { databaseUrl } = getConfig(c);
-		const db = getDb(databaseUrl);
+		const prisma = getPrismaClient(databaseUrl);
 		const userId = c.get("userId");
-		const users = await db<{
-			id: number;
-			email: string;
-			name: string | null;
-			bio: string;
-		}[]>`
-      SELECT id, email, name, bio
-      FROM users
-      WHERE id = ${userId}
-      LIMIT 1
-    `;
-		const user = users[0];
+		const user = await prisma.user.findUnique({
+			where: {
+				id: userId
+			},
+			select: {
+				id: true,
+				email: true,
+				name: true,
+				bio: true
+			}
+		});
 		if (!user) {
 			c.status(404);
 			return c.json({ msg: "User not found" });
@@ -172,27 +179,37 @@ userRouter.get("/me", async (c) => {
 
 userRouter.put("/me", async (c) => {
 	try {
+		const { databaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
 		const body = await c.req.json();
 		const bio = typeof body?.bio === "string" ? body.bio.trim() : "";
 		if (bio.length > 100) {
 			c.status(400);
 			return c.json({ msg: "Bio must be 100 characters or less" });
 		}
-		const { databaseUrl } = getConfig(c);
-		const db = getDb(databaseUrl);
 		const userId = c.get("userId");
-		const users = await db<{ id: number; name: string | null; bio: string }[]>`
-      UPDATE users
-      SET bio = ${bio}
-      WHERE id = ${userId}
-      RETURNING id, name, bio
-    `;
-		const user = users[0];
-		if (!user) {
-			c.status(404);
-			return c.json({ msg: "User not found" });
+		try {
+			const user = await prisma.user.update({
+				where: {
+					id: userId
+				},
+				data: {
+					bio
+				},
+				select: {
+					id: true,
+					name: true,
+					bio: true
+				}
+			});
+			return c.json({ user });
+		} catch (e) {
+			if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+				c.status(404);
+				return c.json({ msg: "User not found" });
+			}
+			throw e;
 		}
-		return c.json({ user });
 	} catch (e) {
 		console.error(e);
 		c.status(500);

@@ -5,7 +5,7 @@ export type AppEnv = {
   JWT_SECRET?: string;
 };
 
-export function getConfig(c: Context<{ Bindings: AppEnv }>) {
+export function getConfig(c: Context<any>) {
   const databaseUrl = c.env?.DATABASE_URL ?? process.env.DATABASE_URL;
   const jwtSecret = c.env?.JWT_SECRET ?? process.env.JWT_SECRET;
 

@@ -1,8 +1,9 @@
 import { Hono } from "hono";
+import { Prisma } from "@prisma/client";
 import { verify } from 'hono/jwt'
 import { createBlogInput, updateBlogInput } from "@blogging-app/common";
 import { getConfig } from "../env";
-import { getDb } from "../db";
+import { getPrismaClient } from "../prisma";
 
 export const blogRouter = new Hono<{
 	Bindings: {
@@ -63,34 +64,45 @@ blogRouter.post('/:id/comments', async (c) => {
 
     const authorId = c.get("userId");
     const { databaseUrl } = getConfig(c);
-    const db = getDb(databaseUrl);
-
+    const prisma = getPrismaClient(databaseUrl);
     try {
-      const comments = await db<{
-        id: number;
-        content: string;
-        created_at: Date;
-        author_name: string | null;
-      }[]>`
-        INSERT INTO comments (content, post_id, author_id)
-        VALUES (${content}, ${postId}, ${authorId})
-        RETURNING id, content, created_at,
-          (SELECT name FROM users WHERE id = ${authorId}) AS author_name
-      `;
-      const comment = comments[0];
+      const post = await prisma.post.findUnique({
+        where: { id: postId },
+        select: { id: true },
+      });
+      if (!post) {
+        c.status(404);
+        return c.json({ msg: "Blog not found" });
+      }
+      const comment = await prisma.comment.create({
+        data: {
+          content,
+          postId,
+          authorId,
+        },
+        select: {
+          id: true,
+          content: true,
+          createdAt: true,
+          author: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
       return c.json({
         comment: {
           id: comment.id,
           content: comment.content,
-          createdAt: comment.created_at.toISOString(),
+          createdAt: comment.createdAt.toISOString(),
           author: {
-            name: comment.author_name
+            name: comment.author.name
           }
         }
       });
     } catch (e: unknown) {
-      const code = (e as { code?: string })?.code;
-      if (code === "23503") {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
         c.status(404);
         return c.json({ msg: "Blog not found" });
       }
@@ -102,8 +114,8 @@ blogRouter.post('/:id/comments', async (c) => {
 
   blogRouter.post('/',async (c) => {
     const body = await c.req.json()
-    const { success } = createBlogInput.safeParse(body)
-    if(!success){
+    const parsed = createBlogInput.safeParse(body)
+    if(!parsed.success){
         c.status(411);
         return c.json({
             msg: "Inputs are Incorrect"
@@ -111,13 +123,17 @@ blogRouter.post('/:id/comments', async (c) => {
     }
     const authorId = c.get("userId")
     const { databaseUrl } = getConfig(c);
-    const db = getDb(databaseUrl);
-    const posts = await db<{ id: number }[]>`
-      INSERT INTO posts (title, content, author_id)
-      VALUES (${body.title}, ${body.content}, ${authorId})
-      RETURNING id
-    `;
-    const blog = posts[0];
+    const prisma = getPrismaClient(databaseUrl);
+    const blog = await prisma.post.create({
+      data: {
+        title: parsed.data.title,
+        content: parsed.data.content,
+        authorId,
+      },
+      select: {
+        id: true,
+      },
+    });
         return c.json({
             id: blog.id
         })
@@ -125,8 +141,8 @@ blogRouter.post('/:id/comments', async (c) => {
   
   blogRouter.put('/',async (c) => {
     const body = await c.req.json()
-    const { success } = updateBlogInput.safeParse(body)
-    if(!success){
+    const parsed = updateBlogInput.safeParse(body)
+    if(!parsed.success){
         c.status(411);
         return c.json({
             msg: "Inputs are Incorrect"
@@ -134,87 +150,90 @@ blogRouter.post('/:id/comments', async (c) => {
     }
     const authorId = c.get("userId")
     const { databaseUrl } = getConfig(c);
-    const db = getDb(databaseUrl);
-    const posts = await db<{ id: number }[]>`
-      UPDATE posts
-      SET title = ${body.title}, content = ${body.content}
-      WHERE id = ${body.id} AND author_id = ${authorId}
-      RETURNING id
-    `;
-    const blog = posts[0];
-    if (!blog) {
+    const prisma = getPrismaClient(databaseUrl);
+    const updated = await prisma.post.updateMany({
+      where: {
+        id: parsed.data.id,
+        authorId,
+      },
+      data: {
+        title: parsed.data.title,
+        content: parsed.data.content,
+      },
+    });
+    if (updated.count === 0) {
       c.status(404);
       return c.json({
         msg: "Blog not found"
       });
     }
         return c.json({
-            id: blog.id
+            id: parsed.data.id
         })
     })
 
     //TODO pagination
     blogRouter.get('/bulk',async (c) => {
         const { databaseUrl } = getConfig(c);
-        const db = getDb(databaseUrl);
-        const blogRows = await db<{
-          content: string;
-          title: string;
-          id: number;
-          author_name: string | null;
-          author_bio: string;
-          comment_count: string | number;
-          created_at: Date;
-        }[]>`
-          SELECT
-            p.id,
-            p.title,
-            p.content,
-            p.created_at,
-            u.name AS author_name,
-            u.bio AS author_bio,
-            (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count
-          FROM posts p
-          INNER JOIN users u ON u.id = p.author_id
-          ORDER BY p.id DESC
-        `;
-
-        const blogs = await Promise.all(
-          blogRows.map(async (blog) => {
-            const comments = await db<{
-              id: number;
-              content: string;
-              created_at: Date;
-              author_name: string | null;
-            }[]>`
-              SELECT c.id, c.content, c.created_at, u.name AS author_name
-              FROM comments c
-              INNER JOIN users u ON u.id = c.author_id
-              WHERE c.post_id = ${blog.id}
-              ORDER BY c.created_at ASC
-              LIMIT 3
-            `;
-            return {
-              id: blog.id,
-              title: blog.title,
-              content: blog.content,
-              createdAt: blog.created_at.toISOString(),
-              author: {
-                name: blog.author_name,
-                bio: blog.author_bio
+        const prisma = getPrismaClient(databaseUrl);
+        const blogRows = await prisma.post.findMany({
+          orderBy: {
+            id: "desc",
+          },
+          select: {
+            id: true,
+            title: true,
+            content: true,
+            createdAt: true,
+            author: {
+              select: {
+                name: true,
+                bio: true,
               },
-              commentCount: Number(blog.comment_count),
-              topComments: comments.map((comment) => ({
-                id: comment.id,
-                content: comment.content,
-                createdAt: comment.created_at.toISOString(),
+            },
+            _count: {
+              select: {
+                comments: true,
+              },
+            },
+            comments: {
+              orderBy: {
+                createdAt: "asc",
+              },
+              take: 3,
+              select: {
+                id: true,
+                content: true,
+                createdAt: true,
                 author: {
-                  name: comment.author_name
-                }
-              }))
-            };
-          })
-        );
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const blogs = blogRows.map((blog) => ({
+          id: blog.id,
+          title: blog.title,
+          content: blog.content,
+          createdAt: blog.createdAt.toISOString(),
+          author: {
+            name: blog.author.name,
+            bio: blog.author.bio
+          },
+          commentCount: blog._count.comments,
+          topComments: blog.comments.map((comment) => ({
+            id: comment.id,
+            content: comment.content,
+            createdAt: comment.createdAt.toISOString(),
+            author: {
+              name: comment.author.name
+            }
+          }))
+        }));
 
         return c.json({
             blogs
@@ -228,58 +247,60 @@ blogRouter.post('/:id/comments', async (c) => {
       return c.json({ msg: "Invalid blog id" });
     }
     const { databaseUrl } = getConfig(c);
-    const db = getDb(databaseUrl);
-
+    const prisma = getPrismaClient(databaseUrl);
     try {
-    const blogs = await db<{
-      id: number;
-      title: string;
-      content: string;
-      author_name: string | null;
-      author_bio: string;
-      created_at: Date;
-    }[]>`
-      SELECT p.id, p.title, p.content, p.created_at, u.name AS author_name, u.bio AS author_bio
-      FROM posts p
-      INNER JOIN users u ON u.id = p.author_id
-      WHERE p.id = ${id}
-      LIMIT 1
-    `;
-    const blog = blogs[0];
+    const blog = await prisma.post.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        createdAt: true,
+        author: {
+          select: {
+            name: true,
+            bio: true,
+          },
+        },
+        comments: {
+          orderBy: {
+            createdAt: "asc",
+          },
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            author: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
     if (!blog) {
       c.status(404);
       return c.json({
         msg: "Blog not found"
       });
     }
-    const comments = await db<{
-      id: number;
-      content: string;
-      created_at: Date;
-      author_name: string | null;
-    }[]>`
-      SELECT c.id, c.content, c.created_at, u.name AS author_name
-      FROM comments c
-      INNER JOIN users u ON u.id = c.author_id
-      WHERE c.post_id = ${id}
-      ORDER BY c.created_at ASC
-    `;
         return c.json({
             blog: {
               id: blog.id,
               title: blog.title,
               content: blog.content,
-              createdAt: blog.created_at.toISOString(),
+              createdAt: blog.createdAt.toISOString(),
               author: {
-                name: blog.author_name,
-                bio: blog.author_bio
+                name: blog.author.name,
+                bio: blog.author.bio
               },
-              comments: comments.map((comment) => ({
+              comments: blog.comments.map((comment) => ({
                 id: comment.id,
                 content: comment.content,
-                createdAt: comment.created_at.toISOString(),
+                createdAt: comment.createdAt.toISOString(),
                 author: {
-                  name: comment.author_name
+                  name: comment.author.name
                 }
               }))
             }
