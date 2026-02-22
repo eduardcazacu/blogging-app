@@ -2,18 +2,7 @@ import { Appbar } from "../components/Appbar"
 import { BlogCard } from "../components/BlogCard"
 import { BlogSkeleton } from "../components/BlogSkeleton";
 import { useBlogs } from "../hooks"
-
-function formatPublishedDate(dateIso: string) {
-  const date = new Date(dateIso);
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown date";
-  }
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+import { formatPostedTime } from "../lib/datetime";
 
 export const Blogs = () => {
 
@@ -49,7 +38,7 @@ export const Blogs = () => {
          authorname ={blog.author.name || "Anonymous"}
          title={blog.title}
          content={blog.content}
-         publishedDate={formatPublishedDate(blog.createdAt)}
+         publishedDate={formatPostedTime(blog.createdAt)}
          commentCount={blog.commentCount || 0}
          topComments={blog.topComments || []} />) }
         

@@ -5,18 +5,7 @@ import { Appbar } from "./Appbar";
 import { Avatar } from "./BlogCard";
 import { BACKEND_URL } from "../config";
 import { getAuthHeader } from "../lib/auth";
-
-function formatPublishedDate(dateIso: string) {
-  const date = new Date(dateIso);
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown date";
-  }
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
+import { formatPostedTime } from "../lib/datetime";
 
 export const FullBlog = ({ blog }: { blog: Blog }) => {
   const [comments, setComments] = useState(blog.comments || []);
@@ -74,7 +63,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
               </div>
               <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">{blog.title}</div>
             </div>
-            <div className="text-sm text-slate-500 pt-2 sm:pt-3">Posted on {formatPublishedDate(blog.createdAt)}</div>
+            <div className="text-sm text-slate-500 pt-2 sm:pt-3">Posted {formatPostedTime(blog.createdAt)}</div>
             <div className="pt-3 text-sm leading-7 break-words sm:pt-4 sm:text-base">{blog.content}</div>
             <div id="comments" className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:mt-8 sm:p-5">
               <div className="text-lg font-semibold">Comments</div>
@@ -108,7 +97,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                         {comment.author.name || "Anonymous"}
                       </div>
                       <div className="text-xs text-slate-500 pt-0.5">
-                        {formatPublishedDate(comment.createdAt)}
+                        {formatPostedTime(comment.createdAt)}
                       </div>
                       <div className="pt-2 text-sm leading-6 text-slate-700 break-words">
                         {comment.content}

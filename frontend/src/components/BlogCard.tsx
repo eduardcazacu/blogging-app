@@ -21,6 +21,9 @@ export const BlogCard = ({
     commentCount = 0
 }: BlogCardProps) => {
   const navigate = useNavigate();
+  const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const estimatedReadMinutes = Math.max(1, Math.ceil(wordCount / 225));
+  const showReadTime = estimatedReadMinutes > 2;
 
   return ( 
   <div
@@ -54,9 +57,11 @@ export const BlogCard = ({
         <div className="text-ms font-thin">
             {content.slice(0,100)+"..."}
         </div>
-        <div className="text-slate-400 text-sm pt-4">
-            {`${Math.ceil(content.length / 100)} minutes(s) read`}
-        </div>
+        {showReadTime ? (
+          <div className="text-slate-400 text-sm pt-4">
+            {`${estimatedReadMinutes} min read`}
+          </div>
+        ) : null}
         {topComments.length > 0 ? (
           <div className="mt-4 border-t border-slate-200 pt-3">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
