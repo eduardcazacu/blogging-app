@@ -62,3 +62,11 @@
   padding-left: 0.75rem;
   color: #475569;
 }
+
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
