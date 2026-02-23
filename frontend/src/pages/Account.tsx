@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Appbar } from "../components/Appbar";
 import { BACKEND_URL } from "../config";
-import { getAuthHeader } from "../lib/auth";
+import { clearAuthStorage, getAuthHeader, isAuthErrorStatus } from "../lib/auth";
+import { Navigate } from "react-router-dom";
 
 const BIO_MAX_LENGTH = 100;
 
@@ -21,6 +22,7 @@ export const Account = () => {
   const [bio, setBio] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [authExpired, setAuthExpired] = useState(false);
 
   useEffect(() => {
     async function loadProfile() {
@@ -40,6 +42,11 @@ export const Account = () => {
         }
       } catch (e) {
         if (axios.isAxiosError(e)) {
+          if (isAuthErrorStatus(e.response?.status)) {
+            clearAuthStorage();
+            setAuthExpired(true);
+            return;
+          }
           setError(e.response?.data?.msg || "Failed to load account");
         } else {
           setError("Failed to load account");
@@ -76,6 +83,11 @@ export const Account = () => {
       setSuccess("Profile updated");
     } catch (e) {
       if (axios.isAxiosError(e)) {
+        if (isAuthErrorStatus(e.response?.status)) {
+          clearAuthStorage();
+          setAuthExpired(true);
+          return;
+        }
         setError(e.response?.data?.msg || "Failed to save bio");
       } else {
         setError("Failed to save bio");
@@ -83,6 +95,10 @@ export const Account = () => {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (authExpired) {
+    return <Navigate to="/signin" replace />;
   }
 
   return (

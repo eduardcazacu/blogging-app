@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { Appbar } from "../components/Appbar";
 import { BACKEND_URL } from "../config";
-import { getAuthHeader } from "../lib/auth";
+import { clearAuthStorage, getAuthHeader, isAuthErrorStatus } from "../lib/auth";
+import { Navigate } from "react-router-dom";
 
 type PendingUser = {
   id: number;
@@ -15,6 +16,7 @@ export const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [authExpired, setAuthExpired] = useState(false);
 
   async function loadPendingUsers() {
     setLoading(true);
@@ -28,6 +30,11 @@ export const Admin = () => {
       setPendingUsers(response.data?.users ?? []);
     } catch (e) {
       if (axios.isAxiosError(e)) {
+        if (isAuthErrorStatus(e.response?.status)) {
+          clearAuthStorage();
+          setAuthExpired(true);
+          return;
+        }
         setError(e.response?.data?.msg || "Failed to load pending users");
       } else {
         setError("Failed to load pending users");
@@ -55,6 +62,11 @@ export const Admin = () => {
       setPendingUsers((users) => users.filter((user) => user.id !== id));
     } catch (e) {
       if (axios.isAxiosError(e)) {
+        if (isAuthErrorStatus(e.response?.status)) {
+          clearAuthStorage();
+          setAuthExpired(true);
+          return;
+        }
         alert(e.response?.data?.msg || "Failed to approve user");
       } else {
         alert("Failed to approve user");
@@ -76,11 +88,20 @@ export const Admin = () => {
       setPendingUsers((users) => users.filter((user) => user.id !== id));
     } catch (e) {
       if (axios.isAxiosError(e)) {
+        if (isAuthErrorStatus(e.response?.status)) {
+          clearAuthStorage();
+          setAuthExpired(true);
+          return;
+        }
         alert(e.response?.data?.msg || "Failed to reject user");
       } else {
         alert("Failed to reject user");
       }
     }
+  }
+
+  if (authExpired) {
+    return <Navigate to="/signin" replace />;
   }
 
   return (

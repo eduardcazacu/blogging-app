@@ -3,7 +3,7 @@ import { Appbar } from "../components/Appbar"
 import { BACKEND_URL } from "../config"
 import { ChangeEvent, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getAuthHeader } from "../lib/auth"
+import { clearAuthStorage, getAuthHeader, isAuthErrorStatus } from "../lib/auth"
 
 export const Publish = () => {
     const [title, setTitle] = useState("");
@@ -23,16 +23,25 @@ export const Publish = () => {
                     setDescription(e.target.value)
                 }} />
                 <button onClick={async () => {
-                    const response = await axios.post(`${BACKEND_URL}/api/v1/blog`, {
-                        title,
-                        content: description
-                        
-                    }, {
-                        headers: {
-                            Authorization: getAuthHeader()
+                    try {
+                        const response = await axios.post(`${BACKEND_URL}/api/v1/blog`, {
+                            title,
+                            content: description
+                            
+                        }, {
+                            headers: {
+                                Authorization: getAuthHeader()
+                            }
+                        });
+                        navigate(`/blog/${response.data.id}`)
+                    } catch (e) {
+                        if (axios.isAxiosError(e) && isAuthErrorStatus(e.response?.status)) {
+                            clearAuthStorage();
+                            navigate("/signin", { replace: true });
+                            return;
                         }
-                    });
-                    navigate(`/blog/${response.data.id}`)
+                        alert(axios.isAxiosError(e) ? e.response?.data?.msg || "Failed to publish post" : "Failed to publish post");
+                    }
                     }} type="submit" className="mt-4 inline-flex items-center px-3 py-2.5 text-sm font-medium text-center text-white bg-blue-700 rounded-lg focus:ring-4 focus:ring-blue-200 hover:bg-blue-800">
                     Publish post
                 </button> 

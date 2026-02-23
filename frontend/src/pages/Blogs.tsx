@@ -3,10 +3,15 @@ import { BlogCard } from "../components/BlogCard"
 import { BlogSkeleton } from "../components/BlogSkeleton";
 import { useBlogs } from "../hooks"
 import { formatPostedTime } from "../lib/datetime";
+import { Navigate } from "react-router-dom";
 
 export const Blogs = () => {
 
-  const {loading, blogs} = useBlogs();
+  const {loading, blogs, authExpired} = useBlogs();
+
+    if (authExpired) {
+      return <Navigate to="/signin" replace />;
+    }
 
     if (loading){
       return <div>

@@ -61,9 +61,9 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
   }
 
   return (
-    <div className="h-screen flex justify-center flex-col">
+    <div className="min-h-screen flex justify-center flex-col px-4 sm:px-6">
         <div className="flex justify-center">
-          <div>
+          <div className="w-full max-w-md">
             <div className="text-4xl font-extrabold pb-2">
             Welcome to {APP_NAME}! <br />
             </div>

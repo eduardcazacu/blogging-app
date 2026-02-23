@@ -64,3 +64,14 @@ export function getAuthHeader() {
   }
   return `Bearer ${token}`;
 }
+
+export function clearAuthStorage() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("displayName");
+  localStorage.removeItem("userEmail");
+  localStorage.removeItem("isAdmin");
+}
+
+export function isAuthErrorStatus(status?: number) {
+  return status === 401 || status === 403;
+}
