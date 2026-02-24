@@ -1,4 +1,4 @@
-import { ChangeEvent, useState } from "react"
+import { ChangeEvent, useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { APP_NAME, BACKEND_URL } from "../config"
 import axios from "axios"
@@ -13,8 +13,26 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
     email: "",
     password: ""
   })
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showResendVerification, setShowResendVerification] = useState(false);
+  const [resendCooldownSec, setResendCooldownSec] = useState(0);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (resendCooldownSec <= 0) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setResendCooldownSec((value) => value - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldownSec]);
 
   async function sendRequest () {
+    setErrorMessage(null);
+    setResendMessage(null);
+    setShowResendVerification(false);
     const parsed = (type === "signup" ? signupInput : signinInput).safeParse(postInputs);
     if (!parsed.success) {
       alert("Please enter a valid email and password.");
@@ -27,7 +45,7 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
         parsed.data
       );
       if (type === "signup") {
-        alert(response.data?.msg || "Signup request sent. Wait for admin approval.");
+        alert(response.data?.msg || "Signup complete. Check your email to verify your account.");
         navigate("/signin");
         return;
       }
@@ -53,10 +71,42 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
       navigate("/blogs")
     } catch (e: unknown){
       if (axios.isAxiosError(e)) {
-        alert(e.response?.data?.msg || "Auth request failed");
+        const msg = e.response?.data?.msg || "Auth request failed";
+        setErrorMessage(msg);
+        if (type === "signin" && msg.toLowerCase().includes("verify your email")) {
+          setShowResendVerification(true);
+        }
         return;
       }
-      alert("Auth request failed");
+      setErrorMessage("Auth request failed");
+    }
+  }
+
+  async function resendVerificationEmail() {
+    if (!postInputs.email || resendCooldownSec > 0 || resendLoading) {
+      return;
+    }
+
+    setResendLoading(true);
+    setResendMessage(null);
+    try {
+      const response = await axios.post(`${BACKEND_URL}/api/v1/user/resend-verification`, {
+        email: postInputs.email,
+      });
+      setResendMessage(response.data?.msg || "Verification email sent.");
+      setResendCooldownSec(60);
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        const retryAfterSeconds = Number(e.response?.data?.retryAfterSeconds);
+        if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+          setResendCooldownSec(Math.ceil(retryAfterSeconds));
+        }
+        setResendMessage(e.response?.data?.msg || "Failed to resend verification email.");
+      } else {
+        setResendMessage("Failed to resend verification email.");
+      }
+    } finally {
+      setResendLoading(false);
     }
   }
 
@@ -99,6 +149,31 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
             }}/>
 
           <button onClick={sendRequest} type="button" className="mt-6 w-full text-white bg-gray-800 hover:bg-gray-900 focus:outline-none focus:ring-4 focus:ring-gray-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-gray-800 dark:hover:bg-gray-700 dark:focus:ring-gray-700 dark:border-gray-700">{type === "signup" ? "Sign Up" : "Sign In"}</button>
+          {errorMessage ? (
+            <p className="text-sm text-red-600 mt-2">{errorMessage}</p>
+          ) : null}
+          {type === "signin" && showResendVerification ? (
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm text-slate-700">
+                Didn&apos;t receive the verification email?
+              </p>
+              <button
+                type="button"
+                onClick={resendVerificationEmail}
+                disabled={resendLoading || resendCooldownSec > 0}
+                className="mt-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resendLoading
+                  ? "Sending..."
+                  : resendCooldownSec > 0
+                    ? `Resend in ${resendCooldownSec}s`
+                    : "Resend verification email"}
+              </button>
+              {resendMessage ? (
+                <p className="text-sm text-slate-700 mt-2">{resendMessage}</p>
+              ) : null}
+            </div>
+          ) : null}
 
           </div>
         </div>

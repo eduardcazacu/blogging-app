@@ -8,14 +8,17 @@ datasource db {
 }
 
 model User {
-  id         Int       @id @default(autoincrement())
-  email      String    @unique
-  name       String?
-  bio        String    @default("")
-  status     String    @default("approved")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  approvedBy Int?      @map("approved_by")
-  password   String
+  id                           Int       @id @default(autoincrement())
+  email                        String    @unique
+  name                         String?
+  bio                          String    @default("")
+  status                       String    @default("approved")
+  createdAt                    DateTime  @default(now()) @map("created_at")
+  approvedBy                   Int?      @map("approved_by")
+  password                     String
+  emailVerifiedAt              DateTime? @map("email_verified_at")
+  emailVerificationTokenHash   String?   @map("email_verification_token_hash")
+  emailVerificationExpiresAt   DateTime? @map("email_verification_expires_at")
 
   posts      Post[]
   comments   Comment[] @relation("CommentAuthor")

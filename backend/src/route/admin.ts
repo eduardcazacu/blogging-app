@@ -4,12 +4,16 @@ import { Prisma } from "@prisma/client";
 import { getConfig } from "../env";
 import { getAdminEmails, isAdminEmail } from "../admin-config";
 import { getPrismaClient } from "../prisma";
+import { sendWelcomeEmail } from "../email";
 
 type AdminEnv = {
   Bindings: {
     DATABASE_URL?: string;
     JWT_SECRET?: string;
     ADMIN_EMAILS?: string;
+    RESEND_API_KEY?: string;
+    EMAIL_FROM?: string;
+    FRONTEND_URL?: string;
   };
   Variables: {
     userId: number;
@@ -108,26 +112,68 @@ adminRouter.put("/approve/:id", async (c) => {
     const { databaseUrl } = getConfig(c);
     const prisma = getPrismaClient(databaseUrl);
     const adminId = c.get("userId");
-    try {
-      const user = await prisma.user.update({
-        where: { id: targetId },
-        data: {
-          status: "approved",
-          approvedBy: adminId,
-        },
-        select: {
-          id: true,
-          email: true,
-          status: true,
-        },
+    const resendApiKey = c.env?.RESEND_API_KEY ?? process.env.RESEND_API_KEY;
+    const emailFrom = c.env?.EMAIL_FROM ?? process.env.EMAIL_FROM;
+    const frontendUrl = c.env?.FRONTEND_URL ?? process.env.FRONTEND_URL ?? "http://localhost:5173";
+
+    const existingUser = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        status: true,
+      },
+    });
+
+    if (!existingUser) {
+      c.status(404);
+      return c.json({ msg: "User not found" });
+    }
+
+    const wasApproved = existingUser.status === "approved";
+    const user = await prisma.user.update({
+      where: { id: targetId },
+      data: {
+        status: "approved",
+        approvedBy: adminId,
+      },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+      },
+    });
+
+    if (wasApproved) {
+      return c.json({ msg: "User is already approved", user });
+    }
+
+    if (!resendApiKey || !emailFrom) {
+      return c.json({
+        msg: "User approved, but welcome email was skipped (missing RESEND_API_KEY or EMAIL_FROM).",
+        user,
       });
-      return c.json({ msg: "User approved", user });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
-        c.status(404);
-        return c.json({ msg: "User not found" });
-      }
-      throw e;
+    }
+
+    const signinUrl = new URL("/signin", frontendUrl).toString();
+
+    try {
+      await sendWelcomeEmail({
+        apiKey: resendApiKey,
+        from: emailFrom,
+        to: existingUser.email,
+        appName: "Eddie's Lounge",
+        recipientName: existingUser.name,
+        signinUrl,
+      });
+      return c.json({ msg: "User approved and welcome email sent", user });
+    } catch (emailError) {
+      console.error(emailError);
+      return c.json({
+        msg: "User approved, but failed to send welcome email.",
+        user,
+      });
     }
   } catch (e) {
     console.error(e);

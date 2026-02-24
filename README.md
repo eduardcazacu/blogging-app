@@ -32,6 +32,9 @@ Backend:
    - `DATABASE_URL=postgres://...`
    - `JWT_SECRET=...`
    - `ADMIN_EMAILS=admin@example.com` (comma-separated supported)
+   - `RESEND_API_KEY=re_xxx`
+   - `EMAIL_FROM=Eddie's Lounge <onboarding@resend.dev>`
+   - `FRONTEND_URL=http://localhost:5173`
    - `PORT=8787` (optional)
 
 Frontend (optional):
@@ -94,6 +97,9 @@ npx wrangler login
 npx wrangler secret put DATABASE_URL
 npx wrangler secret put JWT_SECRET
 npx wrangler secret put ADMIN_EMAILS
+npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put EMAIL_FROM
+npx wrangler secret put FRONTEND_URL
 ```
 
 3. Deploy:
@@ -145,3 +151,10 @@ Frontend:
 - `npm run dev`
 - `npm run build`
 - `npm run preview`
+
+## Auth Notes
+
+- Signup sends a verification email via Resend.
+- Signin requires:
+  - verified email
+  - approved account status (for non-admin emails)

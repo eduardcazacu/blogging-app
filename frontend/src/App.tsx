@@ -6,6 +6,7 @@ import { Blogs } from './pages/Blogs'
 import { Publish } from './pages/Publish'
 import { Account } from './pages/Account'
 import { Admin } from './pages/Admin'
+import { VerifyEmail } from './pages/VerifyEmail'
 
 function App() {
 
@@ -20,6 +21,7 @@ function App() {
           <Route path="/publish" element={<Publish />} />
           <Route path="/account" element={<Account />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
         </Routes>
       </BrowserRouter>
     </>

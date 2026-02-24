@@ -10,6 +10,9 @@ const app = new Hono<{
 		DATABASE_URL?: string,
 		JWT_SECRET?: string,
 		ADMIN_EMAILS?: string,
+		RESEND_API_KEY?: string,
+		EMAIL_FROM?: string,
+		FRONTEND_URL?: string,
 	}
 }>();
 

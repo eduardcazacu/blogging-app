@@ -5,6 +5,9 @@
    - `DATABASE_URL=postgres://postgres:postgres@localhost:5432/blogging_app`
    - `JWT_SECRET=your-local-secret`
    - `ADMIN_EMAILS=admin@example.com` (comma-separated for multiple admins)
+   - `RESEND_API_KEY=re_xxx`
+   - `EMAIL_FROM=Eddie's Lounge <onboarding@resend.dev>`
+   - `FRONTEND_URL=http://localhost:5173`
 3. Install and run:
 
 ```bash
@@ -32,3 +35,9 @@ Then run:
 npm run prisma:generate
 npm run prisma:migrate -- --name init_prisma
 ```
+
+## Email Verification
+
+- Signup sends a verification email via Resend.
+- User must verify email before signing in.
+- Non-admin accounts still require admin approval after email verification.
