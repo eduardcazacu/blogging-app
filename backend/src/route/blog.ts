@@ -172,11 +172,21 @@ blogRouter.post('/:id/comments', async (c) => {
         })
     })
 
-    //TODO pagination
     blogRouter.get('/bulk',async (c) => {
+        const rawCursor = c.req.query("cursor");
+        const rawLimit = c.req.query("limit");
+        const parsedCursor = rawCursor ? Number(rawCursor) : undefined;
+        const parsedLimit = rawLimit ? Number(rawLimit) : 10;
+        const limit = Number.isFinite(parsedLimit)
+          ? Math.max(1, Math.min(25, parsedLimit))
+          : 10;
+        const cursor = Number.isFinite(parsedCursor) ? parsedCursor : undefined;
+
         const { databaseUrl } = getConfig(c);
         const prisma = getPrismaClient(databaseUrl);
         const blogRows = await prisma.post.findMany({
+          where: cursor ? { id: { lt: cursor } } : undefined,
+          take: limit + 1,
           orderBy: {
             id: "desc",
           },
@@ -215,7 +225,11 @@ blogRouter.post('/:id/comments', async (c) => {
           },
         });
 
-        const blogs = blogRows.map((blog) => ({
+        const hasMore = blogRows.length > limit;
+        const pageRows = hasMore ? blogRows.slice(0, limit) : blogRows;
+        const nextCursor = hasMore ? pageRows[pageRows.length - 1]?.id ?? null : null;
+
+        const blogs = pageRows.map((blog) => ({
           id: blog.id,
           title: blog.title,
           content: blog.content,
@@ -236,7 +250,9 @@ blogRouter.post('/:id/comments', async (c) => {
         }));
 
         return c.json({
-            blogs
+            blogs,
+            nextCursor,
+            hasMore
         })
     })
   
