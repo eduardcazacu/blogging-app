@@ -1,5 +1,19 @@
 import z from "zod";
 
+export const themeKeys = [
+    "boring-grey",
+    "sunset",
+    "purple",
+    "forest",
+    "ocean",
+    "rose",
+    "indigo",
+    "gold",
+] as const;
+
+export const themeKeySchema = z.enum(themeKeys);
+export type ThemeKey = z.infer<typeof themeKeySchema>;
+
 export const signupInput = z.object({
     email: z.string().email(),
     password: z.string(),

@@ -1,7 +1,7 @@
 import { Hono, type Context, type Next } from "hono";
 import { Prisma } from "@prisma/client";
 import { sign, verify } from "hono/jwt";
-import { signinInput, signupInput } from "@blogging-app/common";
+import { signinInput, signupInput, themeKeySchema } from "@blogging-app/common";
 import z from "zod";
 import { getConfig } from "../env";
 import { getAdminEmails, isAdminEmail } from "../admin-config";
@@ -383,7 +383,8 @@ userRouter.get("/me", async (c) => {
 				id: true,
 				email: true,
 				name: true,
-				bio: true
+				bio: true,
+				themeKey: true
 			}
 		});
 		if (!user) {
@@ -405,9 +406,15 @@ userRouter.put("/me", async (c) => {
 		const prisma = getPrismaClient(databaseUrl);
 		const body = await c.req.json();
 		const bio = typeof body?.bio === "string" ? body.bio.trim() : "";
+		const rawThemeKey = typeof body?.themeKey === "string" ? body.themeKey : undefined;
+		const parsedThemeKey = rawThemeKey ? themeKeySchema.safeParse(rawThemeKey) : null;
 		if (bio.length > 100) {
 			c.status(400);
 			return c.json({ msg: "Bio must be 100 characters or less" });
+		}
+		if (parsedThemeKey && !parsedThemeKey.success) {
+			c.status(400);
+			return c.json({ msg: "Invalid theme selection." });
 		}
 		const userId = c.get("userId");
 		try {
@@ -416,12 +423,14 @@ userRouter.put("/me", async (c) => {
 					id: userId
 				},
 				data: {
-					bio
+					bio,
+					...(parsedThemeKey?.success ? { themeKey: parsedThemeKey.data } : {})
 				},
 				select: {
 					id: true,
 					name: true,
-					bio: true
+					bio: true,
+					themeKey: true
 				}
 			});
 			return c.json({ user });

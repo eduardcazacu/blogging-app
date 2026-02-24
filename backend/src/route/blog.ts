@@ -199,6 +199,7 @@ blogRouter.post('/:id/comments', async (c) => {
               select: {
                 name: true,
                 bio: true,
+                themeKey: true,
               },
             },
             _count: {
@@ -236,7 +237,8 @@ blogRouter.post('/:id/comments', async (c) => {
           createdAt: blog.createdAt.toISOString(),
           author: {
             name: blog.author.name,
-            bio: blog.author.bio
+            bio: blog.author.bio,
+            themeKey: blog.author.themeKey
           },
           commentCount: blog._count.comments,
           topComments: blog.comments.map((comment) => ({
@@ -276,6 +278,7 @@ blogRouter.post('/:id/comments', async (c) => {
           select: {
             name: true,
             bio: true,
+            themeKey: true,
           },
         },
         comments: {
@@ -309,7 +312,8 @@ blogRouter.post('/:id/comments', async (c) => {
               createdAt: blog.createdAt.toISOString(),
               author: {
                 name: blog.author.name,
-                bio: blog.author.bio
+                bio: blog.author.bio,
+                themeKey: blog.author.themeKey
               },
               comments: blog.comments.map((comment) => ({
                 id: comment.id,

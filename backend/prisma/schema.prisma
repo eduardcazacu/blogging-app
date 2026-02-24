@@ -16,6 +16,7 @@ model User {
   createdAt                    DateTime  @default(now()) @map("created_at")
   approvedBy                   Int?      @map("approved_by")
   password                     String
+  themeKey                     String    @default("boring-grey") @map("theme_key")
   emailVerifiedAt              DateTime? @map("email_verified_at")
   emailVerificationTokenHash   String?   @map("email_verification_token_hash")
   emailVerificationExpiresAt   DateTime? @map("email_verification_expires_at")

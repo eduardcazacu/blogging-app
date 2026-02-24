@@ -23,6 +23,7 @@ export  interface Blog{
     "author": {
         "name": string | null;
         "bio": string;
+        "themeKey"?: string | null;
     }
 }
 

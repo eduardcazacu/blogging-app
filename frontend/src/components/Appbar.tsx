@@ -1,12 +1,15 @@
 import { Link } from "react-router-dom";
 import { Avatar } from "./BlogCard";
 import { Logout } from "./Logout";
+import { DEFAULT_THEME_KEY, THEME_PALETTES } from "../themes";
 // import { useBlogs } from "../hooks";
 
 
 export const Appbar = () => {
   const displayName = localStorage.getItem("displayName") || "User";
   const isAdmin = localStorage.getItem("isAdmin") === "true";
+  const storedThemeKey = localStorage.getItem("themeKey");
+  const avatarThemeKey = THEME_PALETTES.find((theme) => theme.key === storedThemeKey)?.key ?? DEFAULT_THEME_KEY;
 
   return (
     <div className="border-b flex items-center justify-between gap-2 px-4 py-3 sm:gap-3 sm:px-10 sm:py-4">
@@ -41,7 +44,7 @@ export const Appbar = () => {
           </Link>
         ) : null}
         <Link to={"/account"} className="cursor-pointer" aria-label="Account">
-          <Avatar size={"big"} name={displayName}/>
+          <Avatar size={"big"} name={displayName} themeKey={avatarThemeKey} />
         </Link>
         <Logout />
       </div>

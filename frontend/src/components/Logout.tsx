@@ -1,5 +1,6 @@
 // import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { clearAuthStorage } from "../lib/auth";
 
 // export interface LogoutInputType{
 //     login: string,
@@ -12,10 +13,7 @@ export const Logout = () => {
     // setIsLoggedin(true)
 
     const logout = () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("displayName");
-        localStorage.removeItem("userEmail");
-        localStorage.removeItem("isAdmin");
+        clearAuthStorage();
         // setIsLoggedin(false);
         navigate('/')
     };

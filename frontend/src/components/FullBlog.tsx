@@ -8,8 +8,10 @@ import { getAuthHeader } from "../lib/auth";
 import { formatPostedTime } from "../lib/datetime";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { getThemePalette } from "../themes";
 
 export const FullBlog = ({ blog }: { blog: Blog }) => {
+  const theme = getThemePalette(blog.author.themeKey);
   const [comments, setComments] = useState(blog.comments || []);
   const [commentInput, setCommentInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -57,11 +59,14 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
     <div>
       <Appbar />
       <div className="flex justify-center px-3 py-4 sm:px-6 sm:py-8">
-        <div className="grid grid-cols-12 w-full max-w-screen-xl gap-5 rounded-xl border border-slate-200 bg-white p-4 sm:gap-8 sm:p-8">
+        <div
+          className="grid grid-cols-12 w-full max-w-screen-xl gap-5 rounded-xl border p-4 sm:gap-8 sm:p-8"
+          style={{ borderColor: theme.border, backgroundColor: theme.postBg }}
+        >
           <div className="col-span-12 md:col-span-8">
             <div className="flex min-w-0 items-start gap-2 sm:gap-3">
               <div className="shrink-0 flex flex-col justify-start pt-1">
-                  <Avatar size={"small"} name={blog.author.name || "Anonymous"} />
+                  <Avatar size={"small"} name={blog.author.name || "Anonymous"} themeKey={blog.author.themeKey} />
               </div>
               <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">{blog.title}</div>
             </div>
@@ -71,7 +76,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                 {blog.content}
               </ReactMarkdown>
             </div>
-            <div id="comments" className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:mt-8 sm:p-5">
+            <div id="comments" className="mt-6 rounded-lg border p-3 sm:mt-8 sm:p-5" style={{ borderColor: theme.border, backgroundColor: theme.softBg }}>
               <div className="text-lg font-semibold">Comments</div>
               <div className="mt-3">
                 <textarea
@@ -88,7 +93,8 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                   onClick={submitComment}
                   disabled={submitting}
                   type="button"
-                  className="mt-3 inline-flex w-full justify-center items-center rounded-full bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  className="mt-3 inline-flex w-full justify-center items-center rounded-full px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  style={{ backgroundColor: theme.accent }}
                 >
                   {submitting ? "Posting..." : "Post comment"}
                 </button>
@@ -98,7 +104,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                   <div className="text-sm text-slate-500">No comments yet.</div>
                 ) : (
                   comments.map((comment) => (
-                    <div key={comment.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                    <div key={comment.id} className="rounded-lg border bg-white p-3" style={{ borderColor: theme.border }}>
                       <div className="text-sm font-semibold text-slate-800">
                         {comment.author.name || "Anonymous"}
                       </div>
@@ -116,12 +122,12 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
           </div>
 
           <div className="col-span-12 md:col-span-4">
-            <div className="mt-1 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:mt-3 sm:p-5">
+            <div className="mt-1 rounded-lg border p-3 sm:mt-3 sm:p-5" style={{ borderColor: theme.border, backgroundColor: theme.softBg }}>
               <div className="min-w-0 flex-1 pr-1">
                 <div className="text-lg sm:text-xl font-bold leading-tight break-words">
                   About {blog.author.name || "Anonymous"}
                 </div>
-                <div className="pt-2 text-sm text-slate-500 leading-6 break-words sm:text-base">
+                <div className="pt-2 text-sm leading-6 break-words sm:text-base" style={{ color: theme.text }}>
                   {blog.author.bio?.trim() || "No bio yet."}
                 </div>
               </div>

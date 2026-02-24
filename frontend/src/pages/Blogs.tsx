@@ -89,7 +89,8 @@ export const Blogs = () => {
          content={blog.content}
          publishedDate={formatPostedTime(blog.createdAt)}
          commentCount={blog.commentCount || 0}
-         topComments={blog.topComments || []} />) }
+         topComments={blog.topComments || []}
+         themeKey={blog.author.themeKey || undefined} />) }
         {loadingMore ? (
           <>
             <BlogSkeleton />

@@ -60,7 +60,7 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
           Authorization: getAuthHeader(),
         },
       });
-      const profile = me.data?.user as { name?: string | null; email?: string; isAdmin?: boolean };
+      const profile = me.data?.user as { name?: string | null; email?: string; isAdmin?: boolean; themeKey?: string | null };
       const displayName =
         (profile?.name && profile.name.trim()) ||
         profile?.email?.trim() ||
@@ -68,6 +68,11 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
       localStorage.setItem("displayName", displayName);
       localStorage.setItem("userEmail", (profile?.email || parsed.data.email).trim().toLowerCase());
       localStorage.setItem("isAdmin", profile?.isAdmin ? "true" : "false");
+      if (profile?.themeKey) {
+        localStorage.setItem("themeKey", profile.themeKey);
+      } else {
+        localStorage.removeItem("themeKey");
+      }
       navigate("/blogs")
     } catch (e: unknown){
       if (axios.isAxiosError(e)) {

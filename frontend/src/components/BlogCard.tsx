@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { Comment } from "../hooks";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { getThemePalette } from "../themes";
 
 interface BlogCardProps{
     authorname: string;
@@ -12,6 +13,7 @@ interface BlogCardProps{
     id: number;
     topComments?: Comment[];
     commentCount?: number;
+    themeKey?: string | null;
 }
 
 export const BlogCard = ({
@@ -21,9 +23,11 @@ export const BlogCard = ({
     publishedDate,
     id,
     topComments = [],
-    commentCount = 0
+    commentCount = 0,
+    themeKey
 }: BlogCardProps) => {
   const navigate = useNavigate();
+  const theme = getThemePalette(themeKey);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
@@ -47,7 +51,8 @@ export const BlogCard = ({
 
   return ( 
   <div
-    className="rounded-xl border border-slate-200 bg-white p-5 w-full max-w-screen-md cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+    className="rounded-xl border bg-white p-5 w-full max-w-screen-md cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+    style={{ borderColor: theme.border }}
     onClick={() => navigate(`/blog/${id}`)}
     role="link"
     tabIndex={0}
@@ -59,7 +64,7 @@ export const BlogCard = ({
   >
         <div className="flex">
             <div className="">
-            <Avatar size={"small"} name={authorname}/> 
+            <Avatar size={"small"} name={authorname} themeKey={themeKey}/> 
             </div>
            <div className="font-extralight pl-2 text-sm flex justify-center flex-col">
            {authorname}
@@ -110,7 +115,8 @@ export const BlogCard = ({
               <div className="mt-2">
                 <Link
                   to={`/blog/${id}#comments`}
-                  className="text-sm font-medium text-blue-700 hover:underline"
+                  className="text-sm font-medium hover:underline"
+                  style={{ color: theme.accent }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   {`View all ${commentCount} comments`}
@@ -131,12 +137,14 @@ export function Circle(){
     </div>
 }
 
-export function Avatar({ name, size= "small"}: { name: string, size: "small" | "big"}){
+export function Avatar({ name, size= "small", themeKey }: { name: string, size: "small" | "big", themeKey?: string | null }){
     const initial = name?.trim()?.[0]?.toUpperCase() || "?";
+    const theme = getThemePalette(themeKey);
     return <div className={`relative inline-flex items-center justify-center 
-    overflow-hidden bg-gray-400 rounded-full ${size === "small" ? "w-6 h-6": "w-10 h-10"}`}>
+    overflow-hidden rounded-full border ${size === "small" ? "w-6 h-6": "w-10 h-10"}`}
+    style={{ backgroundColor: theme.softBg, borderColor: theme.border }}>
         
-        <span className={`${size === "small" ? "text-xs" : "text-md"} font-small text-gray-900 dark:text-gray-300`}>
+        <span className={`${size === "small" ? "text-xs" : "text-md"} font-small`} style={{ color: theme.text }}>
             {initial}
         </span>
     </div>

@@ -70,6 +70,7 @@ export function clearAuthStorage() {
   localStorage.removeItem("displayName");
   localStorage.removeItem("userEmail");
   localStorage.removeItem("isAdmin");
+  localStorage.removeItem("themeKey");
 }
 
 export function isAuthErrorStatus(status?: number) {
