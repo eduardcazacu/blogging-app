@@ -13,6 +13,14 @@ const app = new Hono<{
 		RESEND_API_KEY?: string,
 		EMAIL_FROM?: string,
 		FRONTEND_URL?: string,
+		R2_PUBLIC_BASE_URL?: string,
+		BLOG_IMAGES?: {
+			put: (key: string, value: ArrayBuffer, options?: {
+				httpMetadata?: { contentType?: string },
+				customMetadata?: Record<string, string>
+			}) => Promise<unknown>,
+			head: (key: string) => Promise<unknown | null>
+		}
 	}
 }>();
 

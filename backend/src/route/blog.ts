@@ -9,11 +9,35 @@ export const blogRouter = new Hono<{
 	Bindings: {
 		DATABASE_URL?: string,
 		JWT_SECRET?: string,
+    R2_PUBLIC_BASE_URL?: string,
+    BLOG_IMAGES?: {
+      put: (key: string, value: ArrayBuffer, options?: {
+        httpMetadata?: { contentType?: string },
+        customMetadata?: Record<string, string>
+      }) => Promise<unknown>,
+      head: (key: string) => Promise<unknown | null>
+    }
 	},
     Variables: {
         userId: number
     }
 }>();
+
+const MAX_IMAGE_FILE_SIZE_BYTES = 3 * 1024 * 1024;
+const allowedImageMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+function buildPublicImageUrl(baseUrl: string | undefined, key: string) {
+  if (!baseUrl) {
+    return null;
+  }
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  return `${normalizedBase}/${key}`;
+}
 
 blogRouter.use("/*", async (c, next) => {
     try {
@@ -46,6 +70,63 @@ blogRouter.use("/*", async (c, next) => {
         })
     }
     
+});
+
+blogRouter.post("/upload-image", async (c) => {
+  const bucket = c.env?.BLOG_IMAGES;
+  if (!bucket) {
+    c.status(500);
+    return c.json({ msg: "BLOG_IMAGES R2 binding is not configured." });
+  }
+
+  try {
+    const formData = await c.req.formData();
+    const fileInput = formData.get("image");
+    if (!(fileInput instanceof File)) {
+      c.status(400);
+      return c.json({ msg: "Image file is required." });
+    }
+
+    if (!allowedImageMimeTypes.has(fileInput.type)) {
+      c.status(400);
+      return c.json({ msg: "Only JPG, PNG, WEBP, or GIF images are allowed." });
+    }
+
+    if (fileInput.size <= 0 || fileInput.size > MAX_IMAGE_FILE_SIZE_BYTES) {
+      c.status(400);
+      return c.json({ msg: "Image must be between 1B and 3MB." });
+    }
+
+    const authorId = c.get("userId");
+    const extensionByMime: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif",
+    };
+    const extension = extensionByMime[fileInput.type] ?? "bin";
+    const key = `posts/${authorId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+    const bytes = await fileInput.arrayBuffer();
+
+    await bucket.put(key, bytes, {
+      httpMetadata: {
+        contentType: fileInput.type,
+      },
+      customMetadata: {
+        authorId: String(authorId),
+      },
+    });
+
+    const { r2PublicBaseUrl } = getConfig(c);
+    return c.json({
+      key,
+      url: buildPublicImageUrl(r2PublicBaseUrl, key),
+    });
+  } catch (e) {
+    console.error(e);
+    c.status(500);
+    return c.json({ msg: "Failed to upload image." });
+  }
 });
 
 blogRouter.post('/:id/comments', async (c) => {
@@ -122,20 +203,40 @@ blogRouter.post('/:id/comments', async (c) => {
         })
     }
     const authorId = c.get("userId")
-    const { databaseUrl } = getConfig(c);
+    const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
+    if (parsed.data.imageKey) {
+      const imageKey = parsed.data.imageKey.trim();
+      const bucket = c.env?.BLOG_IMAGES;
+      if (!imageKey.startsWith(`posts/${authorId}/`)) {
+        c.status(400);
+        return c.json({ msg: "Invalid image key." });
+      }
+      if (!bucket) {
+        c.status(500);
+        return c.json({ msg: "BLOG_IMAGES R2 binding is not configured." });
+      }
+      const exists = await bucket.head(imageKey);
+      if (!exists) {
+        c.status(400);
+        return c.json({ msg: "Image upload not found. Please upload again." });
+      }
+    }
     const prisma = getPrismaClient(databaseUrl);
     const blog = await prisma.post.create({
       data: {
         title: parsed.data.title,
         content: parsed.data.content,
+        imageKey: parsed.data.imageKey?.trim() || null,
         authorId,
       },
       select: {
         id: true,
+        imageKey: true,
       },
     });
         return c.json({
-            id: blog.id
+            id: blog.id,
+            imageUrl: blog.imageKey ? buildPublicImageUrl(r2PublicBaseUrl, blog.imageKey) : null
         })
     })
   
@@ -182,7 +283,7 @@ blogRouter.post('/:id/comments', async (c) => {
           : 10;
         const cursor = Number.isFinite(parsedCursor) ? parsedCursor : undefined;
 
-        const { databaseUrl } = getConfig(c);
+        const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
         const prisma = getPrismaClient(databaseUrl);
         const blogRows = await prisma.post.findMany({
           where: cursor ? { id: { lt: cursor } } : undefined,
@@ -194,6 +295,7 @@ blogRouter.post('/:id/comments', async (c) => {
             id: true,
             title: true,
             content: true,
+            imageKey: true,
             createdAt: true,
             author: {
               select: {
@@ -234,6 +336,8 @@ blogRouter.post('/:id/comments', async (c) => {
           id: blog.id,
           title: blog.title,
           content: blog.content,
+          imageKey: blog.imageKey,
+          imageUrl: blog.imageKey ? buildPublicImageUrl(r2PublicBaseUrl, blog.imageKey) : null,
           createdAt: blog.createdAt.toISOString(),
           author: {
             name: blog.author.name,
@@ -264,7 +368,7 @@ blogRouter.post('/:id/comments', async (c) => {
       c.status(400);
       return c.json({ msg: "Invalid blog id" });
     }
-    const { databaseUrl } = getConfig(c);
+    const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
     const prisma = getPrismaClient(databaseUrl);
     try {
     const blog = await prisma.post.findUnique({
@@ -273,6 +377,7 @@ blogRouter.post('/:id/comments', async (c) => {
         id: true,
         title: true,
         content: true,
+        imageKey: true,
         createdAt: true,
         author: {
           select: {
@@ -309,6 +414,8 @@ blogRouter.post('/:id/comments', async (c) => {
               id: blog.id,
               title: blog.title,
               content: blog.content,
+              imageKey: blog.imageKey,
+              imageUrl: blog.imageKey ? buildPublicImageUrl(r2PublicBaseUrl, blog.imageKey) : null,
               createdAt: blog.createdAt.toISOString(),
               author: {
                 name: blog.author.name,

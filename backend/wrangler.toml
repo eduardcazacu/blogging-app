@@ -6,9 +6,14 @@ compatibility_flags = ["nodejs_compat"]
 # binding = "MY_KV_NAMESPACE"
 # id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-# [[r2_buckets]]
-# binding = "MY_BUCKET"
-# bucket_name = "my-bucket"
+[[r2_buckets]]
+binding = "BLOG_IMAGES"
+bucket_name = "eddies-lounge-images"
+
+[vars]
+# Public dev URL for the bucket domain, e.g. https://pub-xxxxxxxx.r2.dev
+# Add this same var in the Cloudflare dashboard or via Wrangler for each environment.
+R2_PUBLIC_BASE_URL = "https://images.lounge.eduardcazacu.com"
 
 # [[d1_databases]]
 # binding = "DB"

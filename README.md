@@ -35,11 +35,13 @@ Backend:
    - `RESEND_API_KEY=re_xxx`
    - `EMAIL_FROM=Eddie's Lounge <onboarding@resend.dev>`
    - `FRONTEND_URL=http://localhost:5173`
+   - `R2_PUBLIC_BASE_URL=https://pub-<bucket-subdomain>.r2.dev` (for post images)
    - `PORT=8787` (optional)
 
 Frontend (optional):
 
 - Set `VITE_BACKEND_URL` to override API base URL.
+- Set `VITE_IMAGE_TRANSFORM_BASE_URL=https://images.<your-domain>` to force Cloudflare image transformations through your custom image domain.
 - If not set, frontend defaults to `http://localhost:8787`.
 
 ### 3) Install dependencies
@@ -100,19 +102,41 @@ npx wrangler secret put ADMIN_EMAILS
 npx wrangler secret put RESEND_API_KEY
 npx wrangler secret put EMAIL_FROM
 npx wrangler secret put FRONTEND_URL
+npx wrangler secret put R2_PUBLIC_BASE_URL
 ```
 
-3. Deploy:
+3. Configure R2 bucket binding and public URL
+
+- In Cloudflare Dashboard:
+  - `R2` -> `Create bucket` (name it `eddies-lounge-images` or update `backend/wrangler.toml` to match your bucket name).
+  - Open the bucket -> `Settings` -> enable **Public Development URL**.
+  - Copy the generated URL (looks like `https://pub-xxxx.r2.dev`) and use it as `R2_PUBLIC_BASE_URL`.
+- `backend/wrangler.toml` already includes:
+  - `[[r2_buckets]] binding = "BLOG_IMAGES"`
+  - `bucket_name = "eddies-lounge-images"`
+- If you use a different bucket name, edit `backend/wrangler.toml`.
+
+4. Deploy:
 
 ```bash
 npm run deploy
 ```
 
-4. Run Prisma migrations against production DB:
+5. Run Prisma migrations against production DB:
 
 ```bash
 DATABASE_URL="postgres://..." npm run prisma:deploy
 ```
+
+## Image Uploads (R2 + Cloudflare Transformations)
+
+- Users can upload **one image per post** from the publish page.
+- Images are optimized client-side before upload (max stored resolution: **1920x1080**).
+- API upload route: `POST /api/v1/blog/upload-image` (`multipart/form-data`, field: `image`).
+- Post payload supports `imageKey`; post APIs return `imageKey` and `imageUrl`.
+- Frontend serves transformed variants using:
+  - `/cdn-cgi/image/width=...,quality=...,fit=...,format=auto/<imageUrl>`
+- This keeps R2 storage/origin egress low on the free tier.
 
 ## Frontend on Vercel
 
@@ -125,6 +149,7 @@ Recommended Vercel settings:
 
 Required env var on Vercel:
 - `VITE_BACKEND_URL=https://<your-worker-domain>`
+- `VITE_IMAGE_TRANSFORM_BASE_URL=https://images.<your-domain>`
 
 SPA routing fallback is configured in root `vercel.json`.
 

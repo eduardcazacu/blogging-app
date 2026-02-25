@@ -4,6 +4,7 @@ import { Comment } from "../hooks";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getThemePalette } from "../themes";
+import { getTransformedImageUrl, normalizeMarkdownWithInlineImages, toCardPreviewText } from "../lib/content";
 
 interface BlogCardProps{
     authorname: string;
@@ -11,6 +12,7 @@ interface BlogCardProps{
     content: string;
     publishedDate: string;
     id: number;
+    imageUrl?: string | null;
     topComments?: Comment[];
     commentCount?: number;
     themeKey?: string | null;
@@ -22,6 +24,7 @@ export const BlogCard = ({
     content,
     publishedDate,
     id,
+    imageUrl,
     topComments = [],
     commentCount = 0,
     themeKey
@@ -30,7 +33,9 @@ export const BlogCard = ({
   const theme = getThemePalette(themeKey);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
-  const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const previewContent = toCardPreviewText(content);
+  const markdownPreview = normalizeMarkdownWithInlineImages(previewContent);
+  const wordCount = previewContent.trim() ? previewContent.trim().split(/\s+/).length : 0;
   const estimatedReadMinutes = Math.max(1, Math.ceil(wordCount / 225));
   const showReadTime = estimatedReadMinutes > 2;
 
@@ -79,10 +84,20 @@ export const BlogCard = ({
         <div className="text-2xl font-semibold pt-2">
             {title}
         </div>
+        {imageUrl ? (
+          <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+            <img
+              src={getTransformedImageUrl(imageUrl, { width: 920, fit: "cover", quality: 76 })}
+              alt={title}
+              loading="lazy"
+              className="h-44 w-full object-cover sm:h-56"
+            />
+          </div>
+        ) : null}
         <div className="relative">
           <div ref={previewRef} className="markdown-body text-sm font-thin max-h-24 overflow-hidden">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {content}
+                {markdownPreview}
               </ReactMarkdown>
           </div>
           {hasOverflow ? (

@@ -87,6 +87,7 @@ export const Blogs = () => {
          authorname ={blog.author.name || "Anonymous"}
          title={blog.title}
          content={blog.content}
+         imageUrl={blog.imageUrl || undefined}
          publishedDate={formatPostedTime(blog.createdAt)}
          commentCount={blog.commentCount || 0}
          topComments={blog.topComments || []}

@@ -17,6 +17,8 @@ export  interface Blog{
     "title": string;
     "id": number;
     "createdAt": string;
+    "imageKey"?: string | null;
+    "imageUrl"?: string | null;
     "commentCount"?: number;
     "comments"?: Comment[];
     "topComments"?: Comment[];
