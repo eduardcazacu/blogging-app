@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom"
 import { Comment } from "../hooks";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getThemePalette } from "../themes";
-import { getTransformedImageUrl } from "../lib/content";
+import { extractStandaloneImagePreviewUrls, getTransformedImageUrl, isImageLikeUrl } from "../lib/content";
 
 interface BlogCardProps{
     authorname: string;
@@ -31,30 +30,78 @@ export const BlogCard = ({
 }: BlogCardProps) => {
   const markdownComponents = {
     img: () => null,
-    a: (props: any) => <span>{props.children}</span>,
+    a: (props: any) => (
+      <a
+        href={props.href}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="text-blue-700 underline break-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {props.children}
+      </a>
+    ),
   };
+
+  const truncateCommentPreview = (value: string, maxLength = 120) => {
+    const trimmed = value.trim();
+    if (trimmed.length <= maxLength) {
+      return trimmed;
+    }
+    return `${trimmed.slice(0, maxLength).trimEnd()}...`;
+  };
+
   const navigate = useNavigate();
   const theme = getThemePalette(themeKey);
-  const previewRef = useRef<HTMLDivElement | null>(null);
-  const [hasOverflow, setHasOverflow] = useState(false);
+  const standaloneImagePreviewUrls = extractStandaloneImagePreviewUrls(content, 2).filter((url) => url !== imageUrl);
+  const excerptData = (() => {
+    const markdownWithoutStandaloneImages = content
+      .split(/\r?\n/)
+      .filter((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return true;
+        }
+        if (isImageLikeUrl(trimmed)) {
+          return false;
+        }
+        if (/^!\[[^\]]*]\((https?:\/\/\S+)\)$/.test(trimmed)) {
+          return false;
+        }
+        if (/^\[[^\]]*]\((https?:\/\/\S+\.(?:png|jpe?g|gif|webp|avif)(?:[?#]\S*)?)\)$/i.test(trimmed)) {
+          return false;
+        }
+        if (/^<https?:\/\/\S+\.(?:png|jpe?g|gif|webp|avif)(?:[?#]\S*)?>$/i.test(trimmed)) {
+          return false;
+        }
+        return true;
+      })
+      .join("\n")
+      .trim();
+
+    const plainForLength = markdownWithoutStandaloneImages
+      .replace(/\[[^\]]*]\((https?:\/\/\S+)\)/g, "$1")
+      .replace(/[*_`>#~-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const limit = 220;
+    if (plainForLength.length <= limit) {
+      return {
+        markdown: markdownWithoutStandaloneImages,
+        truncated: false,
+      };
+    }
+
+    const truncatedMarkdown = markdownWithoutStandaloneImages.slice(0, limit).trimEnd();
+    return {
+      markdown: `${truncatedMarkdown}...`,
+      truncated: true,
+    };
+  })();
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
   const estimatedReadMinutes = Math.max(1, Math.ceil(wordCount / 225));
   const showReadTime = estimatedReadMinutes > 2;
-
-  useEffect(() => {
-    const checkOverflow = () => {
-      const el = previewRef.current;
-      if (!el) {
-        setHasOverflow(false);
-        return;
-      }
-      setHasOverflow(el.scrollHeight > el.clientHeight + 1);
-    };
-
-    checkOverflow();
-    window.addEventListener("resize", checkOverflow);
-    return () => window.removeEventListener("resize", checkOverflow);
-  }, [content]);
 
   return ( 
   <div
@@ -96,16 +143,50 @@ export const BlogCard = ({
             />
           </div>
         ) : null}
-        <div className="relative">
-          <div ref={previewRef} className="markdown-body text-sm font-thin max-h-24 overflow-hidden">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {content}
-              </ReactMarkdown>
+        {standaloneImagePreviewUrls.length > 0 ? (
+          <div className="mt-2.5 space-y-1.5">
+            {standaloneImagePreviewUrls.map((url) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 no-underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <img
+                  src={getTransformedImageUrl(url, { width: 220, fit: "cover", quality: 70 })}
+                  alt="Linked image preview"
+                  loading="lazy"
+                  className="rounded-md object-cover"
+                  style={{ width: "42px", height: "42px", margin: 0, maxHeight: "42px", flexShrink: 0 }}
+                />
+                <div className="text-xs text-slate-600 break-all">Image link preview</div>
+              </a>
+            ))}
           </div>
-          {hasOverflow ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-b from-transparent to-white" />
-          ) : null}
+        ) : null}
+        <div className="markdown-body pt-2 text-sm font-thin leading-6 text-slate-700">
+          {excerptData.markdown ? (
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {excerptData.markdown}
+            </ReactMarkdown>
+          ) : (
+            <p>Read the full post for details...</p>
+          )}
         </div>
+        {excerptData.truncated ? (
+          <div className="pt-1">
+            <Link
+              to={`/blog/${id}`}
+              className="text-sm font-medium underline"
+              style={{ color: theme.accent }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              Read the full post
+            </Link>
+          </div>
+        ) : null}
         {showReadTime ? (
           <div className="text-slate-400 text-sm pt-3">
             {`${estimatedReadMinutes} min read`}
@@ -123,7 +204,7 @@ export const BlogCard = ({
                     {comment.author.name || "Anonymous"}
                   </div>
                   <div className="text-sm text-slate-600 break-words">
-                    {comment.content}
+                    {truncateCommentPreview(comment.content)}
                   </div>
                 </div>
               ))}
