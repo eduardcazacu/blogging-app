@@ -9,9 +9,13 @@ import { formatPostedTime } from "../lib/datetime";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getThemePalette } from "../themes";
-import { getTransformedImageUrl, normalizeMarkdownWithInlineImages } from "../lib/content";
+import { getTransformedImageUrl } from "../lib/content";
 
 export const FullBlog = ({ blog }: { blog: Blog }) => {
+  const markdownComponents = {
+    img: () => null,
+    a: (props: any) => <span>{props.children}</span>,
+  };
   const theme = getThemePalette(blog.author.themeKey);
   const [comments, setComments] = useState(blog.comments || []);
   const [commentInput, setCommentInput] = useState("");
@@ -73,18 +77,18 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
             </div>
             <div className="text-sm text-slate-500 pt-2 sm:pt-3">Posted {formatPostedTime(blog.createdAt)}</div>
             {blog.imageUrl ? (
-              <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+              <div className="mt-4 overflow-hidden rounded-lg">
                 <img
                   src={getTransformedImageUrl(blog.imageUrl, { width: 1280, fit: "contain", quality: 80 })}
                   alt={blog.title}
-                  className="h-auto max-h-[70vh] w-full object-contain sm:max-h-[60vh]"
+                  className="h-auto max-h-[70vh] w-full object-contain sm:max-h-[55vh] lg:max-h-[48vh]"
                   loading="lazy"
                 />
               </div>
             ) : null}
             <div className="markdown-body pt-3 text-sm leading-7 break-words sm:pt-4 sm:text-base">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {normalizeMarkdownWithInlineImages(blog.content)}
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {blog.content}
               </ReactMarkdown>
             </div>
             <div id="comments" className="mt-6 rounded-lg border p-3 sm:mt-8 sm:p-5" style={{ borderColor: theme.border, backgroundColor: theme.softBg }}>
@@ -124,8 +128,8 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                       </div>
                       <div className="pt-2 text-sm leading-6 text-slate-700 break-words">
                         <div className="markdown-body">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {normalizeMarkdownWithInlineImages(comment.content)}
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                            {comment.content}
                           </ReactMarkdown>
                         </div>
                       </div>

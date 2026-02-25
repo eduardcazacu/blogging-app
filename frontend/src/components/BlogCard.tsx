@@ -4,7 +4,7 @@ import { Comment } from "../hooks";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getThemePalette } from "../themes";
-import { getTransformedImageUrl, normalizeMarkdownWithInlineImages, toCardPreviewText } from "../lib/content";
+import { getTransformedImageUrl } from "../lib/content";
 
 interface BlogCardProps{
     authorname: string;
@@ -29,13 +29,15 @@ export const BlogCard = ({
     commentCount = 0,
     themeKey
 }: BlogCardProps) => {
+  const markdownComponents = {
+    img: () => null,
+    a: (props: any) => <span>{props.children}</span>,
+  };
   const navigate = useNavigate();
   const theme = getThemePalette(themeKey);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
-  const previewContent = toCardPreviewText(content);
-  const markdownPreview = normalizeMarkdownWithInlineImages(previewContent);
-  const wordCount = previewContent.trim() ? previewContent.trim().split(/\s+/).length : 0;
+  const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
   const estimatedReadMinutes = Math.max(1, Math.ceil(wordCount / 225));
   const showReadTime = estimatedReadMinutes > 2;
 
@@ -56,7 +58,7 @@ export const BlogCard = ({
 
   return ( 
   <div
-    className="rounded-xl border bg-white p-5 w-full max-w-screen-md cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+    className="rounded-xl border bg-white p-4 w-full max-w-screen-md cursor-pointer shadow-sm hover:shadow-md transition-shadow sm:p-4"
     style={{ borderColor: theme.border }}
     onClick={() => navigate(`/blog/${id}`)}
     role="link"
@@ -85,19 +87,19 @@ export const BlogCard = ({
             {title}
         </div>
         {imageUrl ? (
-          <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+          <div className="mt-2.5 overflow-hidden rounded-lg">
             <img
               src={getTransformedImageUrl(imageUrl, { width: 920, fit: "cover", quality: 76 })}
               alt={title}
               loading="lazy"
-              className="h-44 w-full object-cover sm:h-56"
+              className="aspect-square w-full object-cover sm:aspect-auto sm:h-72"
             />
           </div>
         ) : null}
         <div className="relative">
           <div ref={previewRef} className="markdown-body text-sm font-thin max-h-24 overflow-hidden">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {markdownPreview}
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {content}
               </ReactMarkdown>
           </div>
           {hasOverflow ? (
@@ -105,16 +107,16 @@ export const BlogCard = ({
           ) : null}
         </div>
         {showReadTime ? (
-          <div className="text-slate-400 text-sm pt-4">
+          <div className="text-slate-400 text-sm pt-3">
             {`${estimatedReadMinutes} min read`}
           </div>
         ) : null}
         {topComments.length > 0 ? (
-          <div className="mt-4 border-t border-slate-200 pt-3">
+          <div className="mt-3 border-t border-slate-200 pt-2.5">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Comments
             </div>
-            <div className="mt-2 space-y-2">
+            <div className="mt-1.5 space-y-1.5">
               {topComments.map((comment) => (
                 <div key={comment.id} className="rounded-md bg-slate-50 p-2">
                   <div className="text-xs font-medium text-slate-700">

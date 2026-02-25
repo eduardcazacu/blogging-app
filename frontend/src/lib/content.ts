@@ -1,36 +1,5 @@
 import { IMAGE_TRANSFORM_BASE_URL } from "../config";
 
-const IMAGE_URL_REGEX = /^https?:\/\/\S+\.(?:png|jpe?g|gif|webp|avif)(?:\?\S*)?$/i;
-
-export function normalizeMarkdownWithInlineImages(input: string) {
-  if (!input?.trim()) {
-    return "";
-  }
-  return input
-    .split(/\r?\n/)
-    .map((line) => {
-      const trimmed = line.trim();
-      if (IMAGE_URL_REGEX.test(trimmed)) {
-        return `![](${trimmed})`;
-      }
-      return line;
-    })
-    .join("\n");
-}
-
-export function toCardPreviewText(input: string) {
-  if (!input) {
-    return "";
-  }
-
-  return input
-    .replace(/!\[[^\]]*]\(([^)]+)\)/g, "")
-    .split(/\r?\n/)
-    .filter((line) => !IMAGE_URL_REGEX.test(line.trim()))
-    .join("\n")
-    .trim();
-}
-
 export function getTransformedImageUrl(
   originalUrl: string,
   options: { width: number; quality?: number; fit?: "cover" | "contain" } = { width: 1200 }
@@ -61,5 +30,17 @@ export function getTransformedImageUrl(
     return originalUrl;
   }
 
-  return `${transformOrigin}/cdn-cgi/image/width=${width},quality=${quality},fit=${fit},format=auto/${originalUrl}`;
+  let source = originalUrl;
+  try {
+    const original = new URL(originalUrl);
+    const transform = new URL(transformOrigin);
+    if (original.origin === transform.origin) {
+      const normalizedPath = original.pathname.replace(/^\/+/, "");
+      source = `${normalizedPath}${original.search}`;
+    }
+  } catch {
+    source = originalUrl;
+  }
+
+  return `${transformOrigin}/cdn-cgi/image/width=${width},quality=${quality},fit=${fit},format=auto/${source}`;
 }
