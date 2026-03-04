@@ -91,95 +91,98 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
   }
 
   return (
-    <div>
+    <div className="min-h-screen" style={{ backgroundColor: theme.postBg }}>
       <Appbar />
       <div className="flex justify-center px-3 py-4 sm:px-6 sm:py-8">
-        <div
-          className="grid grid-cols-12 w-full max-w-screen-xl gap-5 rounded-xl border p-4 sm:gap-8 sm:p-8"
-          style={{ borderColor: theme.border, backgroundColor: theme.postBg }}
-        >
-          <div className="col-span-12 md:col-span-8">
-            <div className="flex min-w-0 items-start gap-2 sm:gap-3">
-              <div className="shrink-0 flex flex-col justify-start pt-1">
-                  <Avatar size={"small"} name={blog.author.name || "Anonymous"} themeKey={blog.author.themeKey} />
+        <div className="w-full max-w-screen-xl space-y-5 sm:space-y-6">
+          <div
+            className="grid grid-cols-12 gap-5 rounded-xl p-4 sm:gap-8 sm:p-8"
+            style={{ backgroundColor: theme.postBg }}
+          >
+            <div className="col-span-12 md:col-span-8">
+              <div className="flex min-w-0 items-start gap-2 sm:gap-3">
+                <div className="shrink-0 flex flex-col justify-start pt-1">
+                    <Avatar size={"small"} name={blog.author.name || "Anonymous"} themeKey={blog.author.themeKey} />
+                </div>
+                <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">{blog.title}</div>
               </div>
-              <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">{blog.title}</div>
+              <div className="text-sm text-slate-500 pt-2 sm:pt-3">Posted {formatPostedTime(blog.createdAt)}</div>
+              {blog.imageUrl ? (
+                <div className="mt-4 overflow-hidden rounded-lg">
+                  <img
+                    src={getTransformedImageUrl(blog.imageUrl, { width: 1280, fit: "contain", quality: 80 })}
+                    alt={blog.title}
+                    className="h-auto max-h-[70vh] w-full object-contain sm:max-h-[55vh] lg:max-h-[48vh]"
+                    loading="lazy"
+                  />
+                </div>
+              ) : null}
+              <div className="markdown-body pt-3 text-sm leading-7 break-words sm:pt-4 sm:text-base">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {withStandaloneImagePreviewMarkdown(blog.content)}
+                </ReactMarkdown>
+              </div>
             </div>
-            <div className="text-sm text-slate-500 pt-2 sm:pt-3">Posted {formatPostedTime(blog.createdAt)}</div>
-            {blog.imageUrl ? (
-              <div className="mt-4 overflow-hidden rounded-lg">
-                <img
-                  src={getTransformedImageUrl(blog.imageUrl, { width: 1280, fit: "contain", quality: 80 })}
-                  alt={blog.title}
-                  className="h-auto max-h-[70vh] w-full object-contain sm:max-h-[55vh] lg:max-h-[48vh]"
-                  loading="lazy"
-                />
-              </div>
-            ) : null}
-            <div className="markdown-body pt-3 text-sm leading-7 break-words sm:pt-4 sm:text-base">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {withStandaloneImagePreviewMarkdown(blog.content)}
-              </ReactMarkdown>
-            </div>
-            <div id="comments" className="mt-6 rounded-lg border p-3 sm:mt-8 sm:p-5" style={{ borderColor: theme.border, backgroundColor: theme.softBg }}>
-              <div className="text-lg font-semibold">Comments</div>
-              <div className="mt-3">
-                <textarea
-                  value={commentInput}
-                  onChange={(e) => setCommentInput(e.target.value)}
-                  rows={3}
-                  className="block w-full rounded-lg border border-gray-300 bg-white p-3 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
-                  placeholder="Write a comment..."
-                />
-                {commentError ? (
-                  <div className="pt-2 text-sm text-red-600">{commentError}</div>
-                ) : null}
-                <button
-                  onClick={submitComment}
-                  disabled={submitting}
-                  type="button"
-                  className="mt-3 inline-flex w-full justify-center items-center rounded-full px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                  style={{ backgroundColor: theme.accent }}
-                >
-                  {submitting ? "Posting..." : "Post comment"}
-                </button>
-              </div>
-              <div className="mt-5 space-y-3">
-                {comments.length === 0 ? (
-                  <div className="text-sm text-slate-500">No comments yet.</div>
-                ) : (
-                  comments.map((comment) => (
-                    <div key={comment.id} className="rounded-lg border bg-white p-3" style={{ borderColor: theme.border }}>
-                      <div className="text-sm font-semibold text-slate-800">
-                        {comment.author.name || "Anonymous"}
-                      </div>
-                      <div className="text-xs text-slate-500 pt-0.5">
-                        {formatPostedTime(comment.createdAt)}
-                      </div>
-                      <div className="pt-2 text-sm leading-6 text-slate-700 break-words">
-                        <div className="markdown-body">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                            {withStandaloneImagePreviewMarkdown(comment.content)}
-                          </ReactMarkdown>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
+
+            <div className="col-span-12 md:col-span-4">
+              <div className="mt-1 rounded-lg p-3 sm:mt-3 sm:p-5" style={{ backgroundColor: theme.softBg }}>
+                <div className="min-w-0 flex-1 pr-1">
+                  <div className="text-lg sm:text-xl font-bold leading-tight break-words">
+                    About {blog.author.name || "Anonymous"}
+                  </div>
+                  <div className="pt-2 text-sm leading-6 break-words sm:text-base" style={{ color: theme.text }}>
+                    {blog.author.bio?.trim() || "No bio yet."}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="col-span-12 md:col-span-4">
-            <div className="mt-1 rounded-lg border p-3 sm:mt-3 sm:p-5" style={{ borderColor: theme.border, backgroundColor: theme.softBg }}>
-              <div className="min-w-0 flex-1 pr-1">
-                <div className="text-lg sm:text-xl font-bold leading-tight break-words">
-                  About {blog.author.name || "Anonymous"}
-                </div>
-                <div className="pt-2 text-sm leading-6 break-words sm:text-base" style={{ color: theme.text }}>
-                  {blog.author.bio?.trim() || "No bio yet."}
-                </div>
-              </div>
+          <div id="comments" className="rounded-lg p-3 sm:p-5" style={{ backgroundColor: theme.softBg }}>
+            <div className="text-lg font-semibold">Comments</div>
+            <div className="mt-3">
+              <textarea
+                value={commentInput}
+                onChange={(e) => setCommentInput(e.target.value)}
+                rows={3}
+                className="block w-full rounded-lg border border-gray-300 bg-white p-3 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                placeholder="Write a comment..."
+              />
+              {commentError ? (
+                <div className="pt-2 text-sm text-red-600">{commentError}</div>
+              ) : null}
+              <button
+                onClick={submitComment}
+                disabled={submitting}
+                type="button"
+                className="mt-3 inline-flex w-full justify-center items-center rounded-full px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                style={{ backgroundColor: theme.accent }}
+              >
+                {submitting ? "Posting..." : "Post comment"}
+              </button>
+            </div>
+            <div className="mt-5 space-y-3">
+              {comments.length === 0 ? (
+                <div className="text-sm text-slate-500">No comments yet.</div>
+              ) : (
+                comments.map((comment) => (
+                  <div key={comment.id} className="rounded-lg bg-white p-3">
+                    <div className="text-sm font-semibold text-slate-800">
+                      {comment.author.name || "Anonymous"}
+                    </div>
+                    <div className="text-xs text-slate-500 pt-0.5">
+                      {formatPostedTime(comment.createdAt)}
+                    </div>
+                    <div className="pt-2 text-sm leading-6 text-slate-700 break-words">
+                      <div className="markdown-body">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                          {withStandaloneImagePreviewMarkdown(comment.content)}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

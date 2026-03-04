@@ -12,7 +12,7 @@ export const Appbar = () => {
   const avatarThemeKey = THEME_PALETTES.find((theme) => theme.key === storedThemeKey)?.key ?? DEFAULT_THEME_KEY;
 
   return (
-    <div className="border-b flex items-center justify-between gap-2 px-4 py-3 sm:gap-3 sm:px-10 sm:py-4">
+    <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75 shadow-sm flex items-center justify-between gap-2 px-4 py-3 sm:gap-3 sm:px-10 sm:py-4">
       <Link
         to={"/blogs"}
         className="cursor-pointer flex items-center"

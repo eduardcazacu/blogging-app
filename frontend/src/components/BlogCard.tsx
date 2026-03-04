@@ -105,8 +105,7 @@ export const BlogCard = ({
 
   return ( 
   <div
-    className="rounded-xl border bg-white p-4 w-full max-w-screen-md cursor-pointer shadow-sm hover:shadow-md transition-shadow sm:p-4"
-    style={{ borderColor: theme.border }}
+    className="rounded-xl bg-white p-4 w-full max-w-screen-md cursor-pointer shadow-sm hover:shadow-md transition-shadow sm:p-4"
     onClick={() => navigate(`/blog/${id}`)}
     role="link"
     tabIndex={0}

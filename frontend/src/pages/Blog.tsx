@@ -16,7 +16,7 @@ export const Blog = () => {
 
   if (loading || !blog) {
     return (
-      <div>
+      <div className="min-h-screen bg-slate-100">
         <Appbar />
         <FullBlogSkeleton />
       </div>
