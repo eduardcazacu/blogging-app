@@ -21,9 +21,27 @@ function hexToRgb(hex: string) {
   };
 }
 
+function parseColorToRgb(color: string) {
+  const trimmed = color.trim();
+  if (trimmed.startsWith("#")) {
+    return hexToRgb(trimmed);
+  }
+  const rgbMatch = trimmed.match(
+    /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i
+  );
+  if (!rgbMatch) {
+    return { r: 241, g: 245, b: 249 };
+  }
+  return {
+    r: Math.max(0, Math.min(255, Number(rgbMatch[1]))),
+    g: Math.max(0, Math.min(255, Number(rgbMatch[2]))),
+    b: Math.max(0, Math.min(255, Number(rgbMatch[3]))),
+  };
+}
+
 function interpolateHexColor(fromHex: string, toHex: string, t: number) {
-  const from = hexToRgb(fromHex);
-  const to = hexToRgb(toHex);
+  const from = parseColorToRgb(fromHex);
+  const to = parseColorToRgb(toHex);
   const clamped = Math.max(0, Math.min(1, t));
   const r = Math.round(from.r + (to.r - from.r) * clamped);
   const g = Math.round(from.g + (to.g - from.g) * clamped);
