@@ -138,7 +138,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
             </div>
           </div>
 
-          <div id="comments" className="rounded-lg p-3 sm:p-5" style={{ backgroundColor: theme.softBg }}>
+          <div id="comments" className="border-t border-slate-300 pt-5 sm:pt-6">
             <div className="text-lg font-semibold">Comments</div>
             <div className="mt-3">
               <textarea
