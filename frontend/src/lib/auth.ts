@@ -96,8 +96,10 @@ export async function refreshAccessToken() {
       );
       return persistTokenFromResponse(response.data);
     } catch {
-      localStorage.removeItem("token");
-      return null;
+      // Do not clear an existing access token on refresh failures.
+      // iOS PWAs can intermittently miss refresh cookies; keep current token
+      // and let normal API auth checks decide when a real logout is needed.
+      return normalizeToken(localStorage.getItem("token"));
     } finally {
       refreshInFlight = null;
     }
