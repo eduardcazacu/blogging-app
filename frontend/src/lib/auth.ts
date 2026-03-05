@@ -1,3 +1,8 @@
+import axios from "axios";
+import { BACKEND_URL } from "../config";
+
+let refreshInFlight: Promise<string | null> | null = null;
+
 export function normalizeToken(raw: unknown): string | null {
   if (typeof raw !== "string") {
     return null;
@@ -75,4 +80,28 @@ export function clearAuthStorage() {
 
 export function isAuthErrorStatus(status?: number) {
   return status === 401 || status === 403;
+}
+
+export async function refreshAccessToken() {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  refreshInFlight = (async () => {
+    try {
+      const response = await axios.post(
+        `${BACKEND_URL}/api/v1/user/refresh`,
+        {},
+        { withCredentials: true }
+      );
+      return persistTokenFromResponse(response.data);
+    } catch {
+      localStorage.removeItem("token");
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 }

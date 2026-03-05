@@ -1,5 +1,6 @@
 import { Hono, type Context, type Next } from "hono";
 import { Prisma } from "@prisma/client";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { sign, verify } from "hono/jwt";
 import { signinInput, signupInput, themeKeySchema } from "@blogging-app/common";
 import z from "zod";
@@ -32,6 +33,35 @@ type UserRouteEnv = {
 };
 
 export const userRouter = new Hono<UserRouteEnv>();
+
+const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REFRESH_COOKIE_NAME = "refresh_token";
+
+function isSecureRequest(c: Context<UserRouteEnv>) {
+	const url = new URL(c.req.url);
+	return url.protocol === "https:";
+}
+
+function setRefreshTokenCookie(c: Context<UserRouteEnv>, token: string) {
+	setCookie(c, REFRESH_COOKIE_NAME, token, {
+		path: "/",
+		httpOnly: true,
+		secure: isSecureRequest(c),
+		sameSite: "Lax",
+		maxAge: Math.floor(REFRESH_TOKEN_TTL_MS / 1000),
+	});
+}
+
+function clearRefreshTokenCookie(c: Context<UserRouteEnv>) {
+	deleteCookie(c, REFRESH_COOKIE_NAME, {
+		path: "/",
+	});
+}
+
+function createRefreshToken() {
+	return `${crypto.randomUUID()}${crypto.randomUUID()}`;
+}
 
 const profileAuthMiddleware = async (c: Context<UserRouteEnv>, next: Next) => {
 	try {
@@ -237,9 +267,24 @@ userRouter.post('/signin', async (c) => {
 			c.status(403);
 			return c.json({ msg: "Your account is pending admin approval." });
 		}
-	
-		const jwt = await sign({ id: user.id }, jwtSecret, "HS256");
-		return c.text(jwt);
+
+		const refreshToken = createRefreshToken();
+		const refreshTokenHash = await sha256Hex(refreshToken);
+		const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+		await prisma.session.create({
+			data: {
+				userId: user.id,
+				tokenHash: refreshTokenHash,
+				expiresAt: refreshExpiresAt,
+			},
+		});
+		setRefreshTokenCookie(c, refreshToken);
+		const nowSeconds = Math.floor(Date.now() / 1000);
+		const jwt = await sign({
+			id: user.id,
+			exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS
+		}, jwtSecret, "HS256");
+		return c.json({ token: jwt });
 	
 	} catch(e) {
 		console.error(e);
@@ -248,6 +293,113 @@ userRouter.post('/signin', async (c) => {
 	}
 
 	})
+
+userRouter.post("/refresh", async (c) => {
+	try {
+		const refreshToken = getCookie(c, REFRESH_COOKIE_NAME);
+		if (!refreshToken) {
+			c.status(401);
+			return c.json({ msg: "Missing refresh token" });
+		}
+
+		const { databaseUrl, jwtSecret } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const refreshTokenHash = await sha256Hex(refreshToken);
+		const now = new Date();
+		const existing = await prisma.session.findFirst({
+			where: {
+				tokenHash: refreshTokenHash,
+				revokedAt: null,
+				expiresAt: {
+					gt: now,
+				},
+			},
+			select: {
+				id: true,
+				userId: true,
+				user: {
+					select: {
+						emailVerifiedAt: true,
+						status: true,
+					},
+				},
+			},
+		});
+
+		if (!existing) {
+			clearRefreshTokenCookie(c);
+			c.status(401);
+			return c.json({ msg: "Invalid refresh token" });
+		}
+
+		if (!existing.user.emailVerifiedAt || existing.user.status !== "approved") {
+			await prisma.session.update({
+				where: { id: existing.id },
+				data: { revokedAt: now },
+			});
+			clearRefreshTokenCookie(c);
+			c.status(403);
+			return c.json({ msg: "Account is not eligible for refresh" });
+		}
+
+		const nextRefreshToken = createRefreshToken();
+		const nextRefreshTokenHash = await sha256Hex(nextRefreshToken);
+		const nextRefreshExpiry = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+		await prisma.$transaction([
+			prisma.session.update({
+				where: { id: existing.id },
+				data: { revokedAt: now },
+			}),
+			prisma.session.create({
+				data: {
+					userId: existing.userId,
+					tokenHash: nextRefreshTokenHash,
+					expiresAt: nextRefreshExpiry,
+				},
+			}),
+		]);
+
+		setRefreshTokenCookie(c, nextRefreshToken);
+		const nowSeconds = Math.floor(Date.now() / 1000);
+		const jwt = await sign({
+			id: existing.userId,
+			exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS
+		}, jwtSecret, "HS256");
+		return c.json({ token: jwt });
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to refresh session" });
+	}
+});
+
+userRouter.post("/logout", async (c) => {
+	try {
+		const refreshToken = getCookie(c, REFRESH_COOKIE_NAME);
+		clearRefreshTokenCookie(c);
+		if (!refreshToken) {
+			return c.json({ msg: "Logged out" });
+		}
+
+		const { databaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const tokenHash = await sha256Hex(refreshToken);
+		await prisma.session.updateMany({
+			where: {
+				tokenHash,
+				revokedAt: null,
+			},
+			data: {
+				revokedAt: new Date(),
+			},
+		});
+		return c.json({ msg: "Logged out" });
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to logout" });
+	}
+});
 
 userRouter.post("/verify-email", async (c) => {
 	try {

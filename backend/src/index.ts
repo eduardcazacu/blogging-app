@@ -24,7 +24,24 @@ const app = new Hono<{
 	}
 }>();
 
-app.use('/*', cors())
+app.use('/*', (c, next) => {
+  const frontendUrl = c.env?.FRONTEND_URL ?? process.env.FRONTEND_URL ?? "http://localhost:5173";
+  const frontendOrigin = (() => {
+    try {
+      return new URL(frontendUrl).origin;
+    } catch {
+      return frontendUrl;
+    }
+  })();
+
+  const corsMiddleware = cors({
+    origin: [frontendOrigin, "http://localhost:5173", "http://127.0.0.1:5173"],
+    allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  });
+  return corsMiddleware(c, next);
+})
 app.route("api/v1/user", userRouter)
 app.route("api/v1/blog", blogRouter)
 app.route("api/v1/admin", adminRouter)

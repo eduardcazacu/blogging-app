@@ -42,7 +42,8 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
     try{
       const response = await axios.post(
         `${BACKEND_URL}/api/v1/user/${type === "signup" ? "signup" : "signin"}`,
-        parsed.data
+        parsed.data,
+        type === "signin" ? { withCredentials: true } : undefined
       );
       if (type === "signup") {
         alert(response.data?.msg || "Signup complete. Check your email to verify your account.");

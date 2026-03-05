@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Signup } from './pages/Signup'
 import { Signin } from './pages/Signin'
@@ -7,8 +8,21 @@ import { Publish } from './pages/Publish'
 import { Account } from './pages/Account'
 import { Admin } from './pages/Admin'
 import { VerifyEmail } from './pages/VerifyEmail'
+import { refreshAccessToken } from './lib/auth'
 
 function App() {
+  useEffect(() => {
+    void refreshAccessToken();
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshAccessToken();
+      }
+    };
+
+    window.addEventListener("visibilitychange", onVisibilityChange);
+    return () => window.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
 
   return (
     <>

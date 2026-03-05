@@ -1,5 +1,7 @@
 // import { useState } from "react";
+import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { BACKEND_URL } from "../config";
 import { clearAuthStorage } from "../lib/auth";
 
 // export interface LogoutInputType{
@@ -12,10 +14,15 @@ export const Logout = () => {
     const navigate = useNavigate()
     // setIsLoggedin(true)
 
-    const logout = () => {
-        clearAuthStorage();
-        // setIsLoggedin(false);
-        navigate('/')
+    const logout = async () => {
+        try {
+            await axios.post(`${BACKEND_URL}/api/v1/user/logout`, {}, { withCredentials: true });
+        } catch {
+            // Ignore logout API failures and still clear local state.
+        } finally {
+            clearAuthStorage();
+            navigate('/')
+        }
     };
 
     // const login = () =>{
