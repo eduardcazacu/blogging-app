@@ -7,6 +7,8 @@ export interface Comment {
     id: number;
     content: string;
     createdAt: string;
+    likeCount?: number;
+    likedByMe?: boolean;
     author: {
         name: string | null;
     };
@@ -19,6 +21,8 @@ export  interface Blog{
     "createdAt": string;
     "imageKey"?: string | null;
     "imageUrl"?: string | null;
+    "likeCount"?: number;
+    "likedByMe"?: boolean;
     "commentCount"?: number;
     "comments"?: Comment[];
     "topComments"?: Comment[];

@@ -177,6 +177,8 @@ blogRouter.post('/:id/comments', async (c) => {
           id: comment.id,
           content: comment.content,
           createdAt: comment.createdAt.toISOString(),
+          likeCount: 0,
+          likedByMe: false,
           author: {
             name: comment.author.name
           }
@@ -191,6 +193,123 @@ blogRouter.post('/:id/comments', async (c) => {
       c.status(500);
       return c.json({ msg: "Failed to create comment" });
     }
+});
+
+blogRouter.post('/:id/likes/toggle', async (c) => {
+    const postId = Number(c.req.param("id"));
+    if (!Number.isFinite(postId)) {
+      c.status(400);
+      return c.json({ msg: "Invalid blog id" });
+    }
+
+    const userId = c.get("userId");
+    const { databaseUrl } = getConfig(c);
+    const prisma = getPrismaClient(databaseUrl);
+
+    const existing = await prisma.postLike.findUnique({
+      where: {
+        postId_userId: {
+          postId,
+          userId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.postLike.delete({
+        where: {
+          postId_userId: {
+            postId,
+            userId,
+          },
+        },
+      });
+    } else {
+      try {
+        await prisma.postLike.create({
+          data: {
+            postId,
+            userId,
+          },
+        });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+          c.status(404);
+          return c.json({ msg: "Blog not found" });
+        }
+        throw e;
+      }
+    }
+
+    const likeCount = await prisma.postLike.count({
+      where: { postId },
+    });
+
+    return c.json({
+      likedByMe: !existing,
+      likeCount,
+    });
+});
+
+blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
+    const postId = Number(c.req.param("id"));
+    const commentId = Number(c.req.param("commentId"));
+    if (!Number.isFinite(postId) || !Number.isFinite(commentId)) {
+      c.status(400);
+      return c.json({ msg: "Invalid ids" });
+    }
+
+    const userId = c.get("userId");
+    const { databaseUrl } = getConfig(c);
+    const prisma = getPrismaClient(databaseUrl);
+
+    const comment = await prisma.comment.findUnique({
+      where: { id: commentId },
+      select: { postId: true },
+    });
+    if (!comment || comment.postId !== postId) {
+      c.status(404);
+      return c.json({ msg: "Comment not found" });
+    }
+
+    const existing = await prisma.commentLike.findUnique({
+      where: {
+        commentId_userId: {
+          commentId,
+          userId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.commentLike.delete({
+        where: {
+          commentId_userId: {
+            commentId,
+            userId,
+          },
+        },
+      });
+    } else {
+      await prisma.commentLike.create({
+        data: {
+          commentId,
+          userId,
+        },
+      });
+    }
+
+    const likeCount = await prisma.commentLike.count({
+      where: { commentId },
+    });
+
+    return c.json({
+      likedByMe: !existing,
+      likeCount,
+      commentId,
+    });
 });
 
   blogRouter.post('/',async (c) => {
@@ -283,6 +402,7 @@ blogRouter.post('/:id/comments', async (c) => {
           : 10;
         const cursor = Number.isFinite(parsedCursor) ? parsedCursor : undefined;
 
+        const userId = c.get("userId");
         const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
         const prisma = getPrismaClient(databaseUrl);
         const blogRows = await prisma.post.findMany({
@@ -304,11 +424,6 @@ blogRouter.post('/:id/comments', async (c) => {
                 themeKey: true,
               },
             },
-            _count: {
-              select: {
-                comments: true,
-              },
-            },
             comments: {
               orderBy: {
                 createdAt: "asc",
@@ -323,6 +438,35 @@ blogRouter.post('/:id/comments', async (c) => {
                     name: true,
                   },
                 },
+                _count: {
+                  select: {
+                    likes: true,
+                  },
+                },
+                likes: {
+                  where: {
+                    userId,
+                  },
+                  select: {
+                    id: true,
+                  },
+                  take: 1,
+                },
+              },
+            },
+            likes: {
+              where: {
+                userId,
+              },
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
+            _count: {
+              select: {
+                comments: true,
+                likes: true,
               },
             },
           },
@@ -344,11 +488,15 @@ blogRouter.post('/:id/comments', async (c) => {
             bio: blog.author.bio,
             themeKey: blog.author.themeKey
           },
+          likeCount: blog._count.likes,
+          likedByMe: blog.likes.length > 0,
           commentCount: blog._count.comments,
           topComments: blog.comments.map((comment) => ({
             id: comment.id,
             content: comment.content,
             createdAt: comment.createdAt.toISOString(),
+            likeCount: comment._count.likes,
+            likedByMe: comment.likes.length > 0,
             author: {
               name: comment.author.name
             }
@@ -368,6 +516,7 @@ blogRouter.post('/:id/comments', async (c) => {
       c.status(400);
       return c.json({ msg: "Invalid blog id" });
     }
+    const userId = c.get("userId");
     const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
     const prisma = getPrismaClient(databaseUrl);
     try {
@@ -399,6 +548,34 @@ blogRouter.post('/:id/comments', async (c) => {
                 name: true,
               },
             },
+            _count: {
+              select: {
+                likes: true,
+              },
+            },
+            likes: {
+              where: {
+                userId,
+              },
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
+          },
+        },
+        likes: {
+          where: {
+            userId,
+          },
+          select: {
+            id: true,
+          },
+          take: 1,
+        },
+        _count: {
+          select: {
+            likes: true,
           },
         },
       },
@@ -422,10 +599,14 @@ blogRouter.post('/:id/comments', async (c) => {
                 bio: blog.author.bio,
                 themeKey: blog.author.themeKey
               },
+              likeCount: blog._count.likes,
+              likedByMe: blog.likes.length > 0,
               comments: blog.comments.map((comment) => ({
                 id: comment.id,
                 content: comment.content,
                 createdAt: comment.createdAt.toISOString(),
+                likeCount: comment._count.likes,
+                likedByMe: comment.likes.length > 0,
                 author: {
                   name: comment.author.name
                 }

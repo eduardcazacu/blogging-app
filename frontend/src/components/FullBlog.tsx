@@ -48,12 +48,17 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
   };
   const theme = getThemePalette(blog.author.themeKey);
   const [comments, setComments] = useState(blog.comments || []);
+  const [postLikeCount, setPostLikeCount] = useState(blog.likeCount || 0);
+  const [postLikedByMe, setPostLikedByMe] = useState(Boolean(blog.likedByMe));
+  const [postLikeLoading, setPostLikeLoading] = useState(false);
   const [commentInput, setCommentInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
 
   useEffect(() => {
     setComments(blog.comments || []);
+    setPostLikeCount(blog.likeCount || 0);
+    setPostLikedByMe(Boolean(blog.likedByMe));
   }, [blog.id, blog.comments]);
 
   async function submitComment() {
@@ -76,7 +81,11 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
       );
       const comment = response.data?.comment;
       if (comment) {
-        setComments((existing) => [...existing, comment]);
+        setComments((existing) => [...existing, {
+          ...comment,
+          likeCount: 0,
+          likedByMe: false,
+        }]);
       }
       setCommentInput("");
     } catch (e) {
@@ -87,6 +96,53 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
       }
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function togglePostLike() {
+    if (postLikeLoading) {
+      return;
+    }
+    setPostLikeLoading(true);
+    try {
+      const response = await axios.post(
+        `${BACKEND_URL}/api/v1/blog/${blog.id}/likes/toggle`,
+        {},
+        {
+          headers: {
+            Authorization: getAuthHeader(),
+          },
+        }
+      );
+      setPostLikeCount(Number(response.data?.likeCount) || 0);
+      setPostLikedByMe(Boolean(response.data?.likedByMe));
+    } finally {
+      setPostLikeLoading(false);
+    }
+  }
+
+  async function toggleCommentLike(commentId: number) {
+    try {
+      const response = await axios.post(
+        `${BACKEND_URL}/api/v1/blog/${blog.id}/comments/${commentId}/likes/toggle`,
+        {},
+        {
+          headers: {
+            Authorization: getAuthHeader(),
+          },
+        }
+      );
+      const likeCount = Number(response.data?.likeCount) || 0;
+      const likedByMe = Boolean(response.data?.likedByMe);
+      setComments((existing) =>
+        existing.map((comment) =>
+          comment.id === commentId
+            ? { ...comment, likeCount, likedByMe }
+            : comment
+        )
+      );
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -107,6 +163,16 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                 <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">{blog.title}</div>
               </div>
               <div className="text-sm text-slate-500 pt-2 sm:pt-3">Posted {formatPostedTime(blog.createdAt)}</div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={togglePostLike}
+                  disabled={postLikeLoading}
+                  className={`rounded-full px-3 py-1 text-sm font-medium ${postLikedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"} disabled:opacity-60`}
+                >
+                  🍪 {postLikeCount}
+                </button>
+              </div>
               {blog.imageUrl ? (
                 <div className="mt-4 overflow-hidden rounded-lg">
                   <img
@@ -172,6 +238,15 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                     </div>
                     <div className="text-xs text-slate-500 pt-0.5">
                       {formatPostedTime(comment.createdAt)}
+                    </div>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => void toggleCommentLike(comment.id)}
+                        className={`rounded-full px-2 py-1 text-xs font-medium ${comment.likedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}
+                      >
+                        🍪 {comment.likeCount || 0}
+                      </button>
                     </div>
                     <div className="pt-2 text-sm leading-6 text-slate-700 break-words">
                       <div className="markdown-body">

@@ -247,6 +247,8 @@ export const Blogs = () => {
                title={blog.title}
                content={blog.content}
                imageUrl={blog.imageUrl || undefined}
+               likeCount={blog.likeCount || 0}
+               likedByMe={Boolean(blog.likedByMe)}
                publishedDate={formatPostedTime(blog.createdAt)}
                commentCount={blog.commentCount || 0}
                topComments={blog.topComments || []}

@@ -4,6 +4,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getThemePalette } from "../themes";
 import { extractStandaloneImagePreviewUrls, getTransformedImageUrl, isImageLikeUrl } from "../lib/content";
+import axios from "axios";
+import { BACKEND_URL } from "../config";
+import { getAuthHeader } from "../lib/auth";
+import { useState } from "react";
+import type { MouseEvent } from "react";
 
 interface BlogCardProps{
     authorname: string;
@@ -12,6 +17,8 @@ interface BlogCardProps{
     publishedDate: string;
     id: number;
     imageUrl?: string | null;
+    likeCount?: number;
+    likedByMe?: boolean;
     topComments?: Comment[];
     commentCount?: number;
     themeKey?: string | null;
@@ -24,10 +31,15 @@ export const BlogCard = ({
     publishedDate,
     id,
     imageUrl,
+    likeCount = 0,
+    likedByMe = false,
     topComments = [],
     commentCount = 0,
     themeKey
 }: BlogCardProps) => {
+  const [postLikeCount, setPostLikeCount] = useState(likeCount);
+  const [postLikedByMe, setPostLikedByMe] = useState(likedByMe);
+  const [likeLoading, setLikeLoading] = useState(false);
   const markdownComponents = {
     img: () => null,
     a: (props: any) => (
@@ -103,6 +115,29 @@ export const BlogCard = ({
   const estimatedReadMinutes = Math.max(1, Math.ceil(wordCount / 225));
   const showReadTime = estimatedReadMinutes > 2;
 
+  async function togglePostLike(e: MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    if (likeLoading) {
+      return;
+    }
+    setLikeLoading(true);
+    try {
+      const response = await axios.post(
+        `${BACKEND_URL}/api/v1/blog/${id}/likes/toggle`,
+        {},
+        {
+          headers: {
+            Authorization: getAuthHeader(),
+          },
+        }
+      );
+      setPostLikeCount(Number(response.data?.likeCount) || 0);
+      setPostLikedByMe(Boolean(response.data?.likedByMe));
+    } finally {
+      setLikeLoading(false);
+    }
+  }
+
   return ( 
   <div
     className="rounded-xl bg-white p-4 w-full max-w-screen-md cursor-pointer shadow-sm hover:shadow-md transition-shadow sm:p-4"
@@ -127,6 +162,17 @@ export const BlogCard = ({
            </div>
            <div className="text-sm pl-2 font-thin text-slate-500 flex justify-center flex-col">
            {publishedDate} 
+           </div>
+           <div className="ml-auto">
+            <button
+              type="button"
+              onClick={togglePostLike}
+              disabled={likeLoading}
+              className={`rounded-full px-2 py-1 text-xs font-medium ${postLikedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"} disabled:opacity-60`}
+              title="Give a cookie"
+            >
+              🍪 {postLikeCount}
+            </button>
            </div>
         </div>
         <div className="text-2xl font-semibold pt-2">

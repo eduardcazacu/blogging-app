@@ -23,6 +23,8 @@ model User {
 
   posts      Post[]
   comments   Comment[] @relation("CommentAuthor")
+  postLikes  PostLike[]
+  commentLikes CommentLike[]
 
   @@map("users")
 }
@@ -38,6 +40,7 @@ model Post {
 
   author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   comments  Comment[]
+  likes     PostLike[]
 
   @@map("posts")
 }
@@ -51,6 +54,33 @@ model Comment {
 
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   author    User     @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  likes     CommentLike[]
 
   @@map("comments")
+}
+
+model PostLike {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId], map: "post_likes_post_id_user_id_key")
+  @@map("post_likes")
+}
+
+model CommentLike {
+  id        Int      @id @default(autoincrement())
+  commentId Int      @map("comment_id")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId], map: "comment_likes_comment_id_user_id_key")
+  @@map("comment_likes")
 }
