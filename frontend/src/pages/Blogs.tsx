@@ -49,8 +49,35 @@ function interpolateHexColor(fromHex: string, toHex: string, t: number) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+function blendWeightedColors(samples: Array<{ color: string; weight: number }>) {
+  if (samples.length === 0) {
+    return BASE_BG_COLOR;
+  }
+
+  let totalWeight = 0;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  for (const sample of samples) {
+    const w = Math.max(0, sample.weight);
+    const rgb = parseColorToRgb(sample.color);
+    totalWeight += w;
+    r += rgb.r * w;
+    g += rgb.g * w;
+    b += rgb.b * w;
+  }
+
+  if (totalWeight <= 0) {
+    return BASE_BG_COLOR;
+  }
+
+  return `rgb(${Math.round(r / totalWeight)}, ${Math.round(g / totalWeight)}, ${Math.round(b / totalWeight)})`;
+}
+
 export const Blogs = () => {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const lastResolvedBgRef = useRef(BASE_BG_COLOR);
   const [activeBgColor, setActiveBgColor] = useState(BASE_BG_COLOR);
   const [searchParams, setSearchParams] = useSearchParams();
   const pagesParam = Number(searchParams.get("pages") || "1");
@@ -106,7 +133,8 @@ export const Blogs = () => {
       let rafId: number | null = null;
 
       const updateBgFromScroll = () => {
-        const viewportFocusY = window.innerHeight * 0.4;
+        const viewportFocusY = window.innerHeight * 0.22;
+        const visibleSamples: Array<{ color: string; weight: number }> = [];
         let prevCandidate: { distance: number; color: string } | null = null;
         let nextCandidate: { distance: number; color: string } | null = null;
 
@@ -115,6 +143,16 @@ export const Blogs = () => {
           const centerY = rect.top + rect.height / 2;
           const distance = centerY - viewportFocusY;
           const color = card.getAttribute("data-theme-bg") || BASE_BG_COLOR;
+          const isVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+
+          if (isVisible) {
+            const absDistance = Math.abs(distance);
+            visibleSamples.push({
+              color,
+              // Strongly bias cards near the upper viewport focus point.
+              weight: 1 / Math.pow(absDistance + 30, 1.22),
+            });
+          }
 
           if (distance <= 0) {
             if (!prevCandidate || distance > prevCandidate.distance) {
@@ -125,8 +163,10 @@ export const Blogs = () => {
           }
         }
 
-        let nextColor = BASE_BG_COLOR;
-        if (prevCandidate && nextCandidate) {
+        let nextColor = lastResolvedBgRef.current;
+        if (visibleSamples.length > 0) {
+          nextColor = blendWeightedColors(visibleSamples);
+        } else if (prevCandidate && nextCandidate) {
           const span = nextCandidate.distance - prevCandidate.distance;
           const progress = span <= 0 ? 0 : (0 - prevCandidate.distance) / span;
           nextColor = interpolateHexColor(prevCandidate.color, nextCandidate.color, progress);
@@ -136,6 +176,7 @@ export const Blogs = () => {
           nextColor = nextCandidate.color;
         }
 
+        lastResolvedBgRef.current = nextColor;
         setActiveBgColor((current) => (current === nextColor ? current : nextColor));
       };
 
@@ -190,7 +231,7 @@ export const Blogs = () => {
     <div
       className="min-h-screen transition-colors duration-300"
       style={{
-        backgroundImage: `linear-gradient(180deg, ${activeBgColor} 0%, ${activeBgColor} 32%, ${BASE_BG_COLOR} 82%, ${BASE_BG_COLOR} 100%)`,
+        backgroundColor: activeBgColor,
       }}
     >
        <Appbar />

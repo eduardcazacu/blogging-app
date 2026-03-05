@@ -6,6 +6,7 @@ import z from "zod";
 import { getConfig } from "../env";
 import { getAdminEmails, isAdminEmail } from "../admin-config";
 import { getPrismaClient } from "../prisma";
+import { hashPassword, isBcryptHash, verifyPassword } from "../password";
 import {
 	generateVerificationToken,
 	getVerificationExpiryDate,
@@ -100,11 +101,12 @@ userRouter.post('/signup', async (c) => {
 		const verificationToken = generateVerificationToken();
 		const verificationTokenHash = await sha256Hex(verificationToken);
 		const verificationExpiry = getVerificationExpiryDate();
+		const passwordHash = await hashPassword(parsed.data.password);
 
 		const user = await prisma.user.create({
 			data: {
 				email: normalizedEmail,
-				password: parsed.data.password,
+				password: passwordHash,
 				name: parsed.data.name ?? null,
 				status: requestedStatus,
 				emailVerificationTokenHash: verificationTokenHash,
@@ -177,18 +179,35 @@ userRouter.post('/signin', async (c) => {
 		const user = await prisma.user.findFirst({
 			where: {
 				email: normalizeEmail(parsed.data.email),
-				password: parsed.data.password
 			},
 			select: {
 				id: true,
 				status: true,
 				emailVerifiedAt: true,
+				password: true,
 			}
 		});
 	
 		if (!user) {
 			c.status(403); //unauthorised
 			return c.json({ msg: "Incorrect credentials" });
+		}
+
+		const validPassword = await verifyPassword({
+			plainPassword: parsed.data.password,
+			storedPassword: user.password,
+		});
+		if (!validPassword) {
+			c.status(403);
+			return c.json({ msg: "Incorrect credentials" });
+		}
+
+		if (!isBcryptHash(user.password)) {
+			const upgradedHash = await hashPassword(parsed.data.password);
+			await prisma.user.update({
+				where: { id: user.id },
+				data: { password: upgradedHash },
+			});
 		}
 
 		if (!user.emailVerifiedAt) {
