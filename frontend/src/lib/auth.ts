@@ -1,7 +1,9 @@
-import axios from "axios";
+import axios, { type AxiosRequestConfig } from "axios";
 import { BACKEND_URL } from "../config";
 
 let refreshInFlight: Promise<string | null> | null = null;
+let axiosAuthInitialized = false;
+const AUTH_RETRY_MARKER = "__authRetried";
 
 export function normalizeToken(raw: unknown): string | null {
   if (typeof raw !== "string") {
@@ -106,4 +108,88 @@ export async function refreshAccessToken() {
   })();
 
   return refreshInFlight;
+}
+
+function isBackendRequest(url?: string) {
+  if (!url) {
+    return false;
+  }
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url.startsWith(BACKEND_URL);
+  }
+  return url.startsWith("/api/");
+}
+
+function isRefreshRequest(url?: string) {
+  return typeof url === "string" && url.includes("/api/v1/user/refresh");
+}
+
+type RetryableAxiosConfig = AxiosRequestConfig & {
+  [AUTH_RETRY_MARKER]?: boolean;
+};
+
+function setAuthorizationHeader(config: { headers?: unknown }, value: string) {
+  const headers = config.headers as
+    | { set?: (name: string, value: string) => void }
+    | Record<string, unknown>
+    | undefined;
+  if (headers && typeof headers === "object" && "set" in headers && typeof headers.set === "function") {
+    headers.set("Authorization", value);
+    return;
+  }
+  config.headers = {
+    ...(headers && typeof headers === "object" ? headers : {}),
+    Authorization: value,
+  };
+}
+
+export function initializeAxiosAuth() {
+  if (axiosAuthInitialized) {
+    return;
+  }
+  axiosAuthInitialized = true;
+
+  axios.interceptors.request.use((config) => {
+    if (!isBackendRequest(config.url) || isRefreshRequest(config.url)) {
+      return config;
+    }
+
+    const header = getAuthHeader();
+    if (!header) {
+      return config;
+    }
+
+    setAuthorizationHeader(config, header);
+    return config;
+  });
+
+  axios.interceptors.response.use(
+    (response) => response,
+    async (error: unknown) => {
+      if (!axios.isAxiosError(error)) {
+        return Promise.reject(error);
+      }
+
+      const status = error.response?.status;
+      const requestConfig = error.config as RetryableAxiosConfig | undefined;
+      if (
+        !requestConfig ||
+        !isAuthErrorStatus(status) ||
+        !isBackendRequest(requestConfig.url) ||
+        isRefreshRequest(requestConfig.url) ||
+        requestConfig[AUTH_RETRY_MARKER]
+      ) {
+        return Promise.reject(error);
+      }
+
+      requestConfig[AUTH_RETRY_MARKER] = true;
+      const token = await refreshAccessToken();
+      if (!token) {
+        return Promise.reject(error);
+      }
+
+      setAuthorizationHeader(requestConfig, `Bearer ${token}`);
+      return axios(requestConfig);
+    }
+  );
 }

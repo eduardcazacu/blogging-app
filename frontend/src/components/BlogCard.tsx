@@ -217,7 +217,7 @@ export const BlogCard = ({
               {excerptData.markdown}
             </ReactMarkdown>
           ) : (
-            <p>Read the full post for details...</p>
+            <p></p>
           )}
         </div>
         {excerptData.truncated ? (

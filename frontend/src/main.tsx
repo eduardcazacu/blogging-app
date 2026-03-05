@@ -5,8 +5,10 @@ import { SpeedInsights } from "@vercel/speed-insights/react"
 import App from './App.tsx'
 import './index.css'
 import { APP_NAME } from './config'
+import { initializeAxiosAuth } from './lib/auth'
 
 document.title = APP_NAME;
+initializeAxiosAuth();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
