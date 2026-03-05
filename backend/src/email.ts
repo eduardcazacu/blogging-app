@@ -16,6 +16,16 @@ type WelcomeEmailInput = {
   signinUrl?: string;
 };
 
+type PendingApprovalEmailInput = {
+  apiKey: string;
+  from: string;
+  to: string[];
+  appName: string;
+  pendingUserEmail: string;
+  pendingUserName?: string | null;
+  adminUrl?: string;
+};
+
 export async function sendVerificationEmail(input: VerificationEmailInput) {
   const recipient = input.recipientName?.trim() || "there";
   const subject = `${input.appName}: verify your email`;
@@ -104,6 +114,54 @@ export async function sendWelcomeEmail(input: WelcomeEmailInput) {
     body: JSON.stringify({
       from: input.from,
       to: [input.to],
+      subject,
+      html,
+      text,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Resend API error (${response.status}): ${errorBody}`);
+  }
+}
+
+export async function sendPendingApprovalEmail(input: PendingApprovalEmailInput) {
+  const pendingName = input.pendingUserName?.trim() || "Unknown";
+  const subject = `${input.appName}: new account pending approval`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
+      <p>A new account is pending approval.</p>
+      <p><strong>Name:</strong> ${escapeHtml(pendingName)}</p>
+      <p><strong>Email:</strong> ${escapeHtml(input.pendingUserEmail)}</p>
+      ${input.adminUrl
+        ? `<p style="margin: 24px 0;">
+        <a href="${escapeHtml(input.adminUrl)}" style="background: #111827; color: #ffffff; text-decoration: none; padding: 10px 16px; border-radius: 8px; display: inline-block;">
+          Open admin console
+        </a>
+      </p>`
+        : ""}
+    </div>
+  `;
+
+  const text = [
+    "A new account is pending approval.",
+    `Name: ${pendingName}`,
+    `Email: ${input.pendingUserEmail}`,
+    input.adminUrl ? `Admin console: ${input.adminUrl}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: input.from,
+      to: input.to,
       subject,
       html,
       text,

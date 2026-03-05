@@ -15,7 +15,7 @@ import {
 	VERIFICATION_TOKEN_TTL_MS,
 	sha256Hex
 } from "../verification";
-import { sendVerificationEmail } from "../email";
+import { sendPendingApprovalEmail, sendVerificationEmail } from "../email";
 
 type UserRouteEnv = {
 	Bindings: {
@@ -137,6 +137,24 @@ userRouter.post('/signup', async (c) => {
 				msg: "Account created, but verification email could not be sent. Use resend verification after fixing email configuration.",
 				userId: user.id
 			});
+		}
+
+		if (requestedStatus === "pending" && adminEmails.length > 0) {
+			const adminUrl = new URL("/admin", frontendUrl).toString();
+			try {
+				await sendPendingApprovalEmail({
+					apiKey: resendApiKey,
+					from: emailFrom,
+					to: adminEmails,
+					appName: "Eddie's Lounge",
+					pendingUserEmail: normalizedEmail,
+					pendingUserName: user.name,
+					adminUrl,
+				});
+			} catch (adminEmailError) {
+				// Do not block signup on admin notification failures.
+				console.error(adminEmailError);
+			}
 		}
 
 		return c.json({
