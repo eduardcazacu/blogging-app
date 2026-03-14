@@ -1,7 +1,7 @@
 import axios from "axios"
 import { Appbar } from "../components/Appbar"
 import { BACKEND_URL } from "../config"
-import { ChangeEvent, useState } from "react"
+import { ChangeEvent, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { clearAuthStorage, getAuthHeader, isAuthErrorStatus } from "../lib/auth"
 import { getTransformedImageUrl } from "../lib/content"
@@ -10,16 +10,56 @@ const MAX_IMAGE_WIDTH = 1920;
 const MAX_IMAGE_HEIGHT = 1080;
 const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 const TARGET_NON_GIF_BYTES = 1_200_000;
+const POST_DRAFT_STORAGE_KEY = "publishPostDraft";
 
 export const Publish = () => {
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
+    const [draftLoaded, setDraftLoaded] = useState(false);
     const [imageKey, setImageKey] = useState<string | null>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [imageName, setImageName] = useState<string | null>(null);
     const [uploadingImage, setUploadingImage] = useState(false);
     const [imageError, setImageError] = useState<string | null>(null);
     const navigate = useNavigate()
+
+    useEffect(() => {
+      const rawDraft = localStorage.getItem(POST_DRAFT_STORAGE_KEY);
+      if (!rawDraft) {
+        setDraftLoaded(true);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(rawDraft) as { title?: unknown; description?: unknown };
+        if (typeof parsed.title === "string") {
+          setTitle(parsed.title);
+        }
+        if (typeof parsed.description === "string") {
+          setDescription(parsed.description);
+        }
+      } catch {
+        localStorage.removeItem(POST_DRAFT_STORAGE_KEY);
+      } finally {
+        setDraftLoaded(true);
+      }
+    }, []);
+
+    useEffect(() => {
+      if (!draftLoaded) {
+        return;
+      }
+      if (!title.trim() && !description.trim()) {
+        localStorage.removeItem(POST_DRAFT_STORAGE_KEY);
+        return;
+      }
+      localStorage.setItem(
+        POST_DRAFT_STORAGE_KEY,
+        JSON.stringify({
+          title,
+          description,
+        })
+      );
+    }, [draftLoaded, title, description]);
 
     async function loadImageDimensions(file: File) {
       const objectUrl = URL.createObjectURL(file);
@@ -149,7 +189,7 @@ export const Publish = () => {
         <div className="flex justify-center w-full px-4 pt-6 sm:px-6 sm:pt-8">
             <div className="max-w-screen-lg w-full rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
                 {/* <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Title</label> */}
-                <input onChange={(e) => {
+                <input value={title} onChange={(e) => {
                     setTitle(e.target.value)
                 }} type="text" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5  dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="Your Title">
                 </input>
@@ -183,8 +223,8 @@ export const Publish = () => {
                   ) : null}
                 </div>
 
-                <TextEditor onChange={(e) => {
-                    setDescription(e.target.value)
+                <TextEditor value={description} onChange={(e) => {
+                  setDescription(e.target.value)
                 }} />
                 <button onClick={async () => {
                     try {
@@ -198,6 +238,9 @@ export const Publish = () => {
                                 Authorization: getAuthHeader()
                             }
                         });
+                        localStorage.removeItem(POST_DRAFT_STORAGE_KEY);
+                        setTitle("");
+                        setDescription("");
                         navigate(`/blog/${response.data.id}`)
                     } catch (e) {
                         if (axios.isAxiosError(e) && isAuthErrorStatus(e.response?.status)) {
@@ -217,7 +260,7 @@ export const Publish = () => {
   )
 }
 
-function TextEditor({ onChange }: { onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void}){
+function TextEditor({ value, onChange }: { value: string; onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void}){
     return(
 <div className="mt-8">
    <div className="w-full mb-4">
@@ -225,7 +268,7 @@ function TextEditor({ onChange }: { onChange: (e: ChangeEvent<HTMLTextAreaElemen
        
         <div className="my-2 bg-white rounded-b-lg w-full">
             <label  className="sr-only">Publish post</label>
-            <textarea onChange={onChange} id="editor" rows={8} className="block w-full px-0 text-sm focus-outline-none text-gray-800 bg-white border-0  " placeholder="Write a post..." required ></textarea>
+            <textarea value={value} onChange={onChange} id="editor" rows={8} className="block w-full px-0 text-sm focus-outline-none text-gray-800 bg-white border-0  " placeholder="Write a post..." required ></textarea>
         </div>
    </div>
    
