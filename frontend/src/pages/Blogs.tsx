@@ -4,7 +4,7 @@ import { BlogCard } from "../components/BlogCard"
 import { BlogSkeleton } from "../components/BlogSkeleton";
 import { useBlogs } from "../hooks"
 import { formatPostedTime } from "../lib/datetime";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { getThemePalette } from "../themes";
 
 const BASE_BG_COLOR = "#f1f5f9";
@@ -78,12 +78,14 @@ function blendWeightedColors(samples: Array<{ color: string; weight: number }>) 
 export const Blogs = () => {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const lastResolvedBgRef = useRef(BASE_BG_COLOR);
+  const lastRefreshSignalRef = useRef<number | null>(null);
   const [activeBgColor, setActiveBgColor] = useState(BASE_BG_COLOR);
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const pagesParam = Number(searchParams.get("pages") || "1");
   const initialPages = Number.isFinite(pagesParam) ? Math.max(1, Math.min(10, pagesParam)) : 1;
 
-  const {loading, loadingMore, blogs, authExpired, hasMore, loadedPages, fetchNextPage} = useBlogs(initialPages);
+  const {loading, loadingMore, blogs, authExpired, hasMore, loadedPages, fetchNextPage, refreshBlogs} = useBlogs(initialPages);
 
     useEffect(() => {
       if (!hasMore) {
@@ -112,6 +114,18 @@ export const Blogs = () => {
       observer.observe(element);
       return () => observer.disconnect();
     }, [fetchNextPage, hasMore]);
+
+    useEffect(() => {
+      const signal = Number((location.state as { refreshFeedAt?: unknown } | null)?.refreshFeedAt);
+      if (!Number.isFinite(signal) || signal <= 0) {
+        return;
+      }
+      if (lastRefreshSignalRef.current === signal) {
+        return;
+      }
+      lastRefreshSignalRef.current = signal;
+      refreshBlogs();
+    }, [location.state, refreshBlogs]);
 
     useEffect(() => {
       const current = Number(searchParams.get("pages") || "1");

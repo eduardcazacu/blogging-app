@@ -147,6 +147,18 @@ export const useBlogs = (initialPages = 1) =>{
         void fetchPage(nextCursor);
     }, [authExpired, fetchPage, hasMore, loading, loadingMore, nextCursor]);
 
+    const refreshBlogs = useCallback(() => {
+        if (requestInFlight.current) {
+            return;
+        }
+        hasLoadedInitial.current = false;
+        setBlogs([]);
+        setNextCursor(null);
+        setHasMore(true);
+        setLoadedPages(1);
+        void fetchPage(null, PAGE_SIZE);
+    }, [PAGE_SIZE, fetchPage]);
+
     return {
         loading,
         loadingMore,
@@ -154,6 +166,7 @@ export const useBlogs = (initialPages = 1) =>{
         authExpired,
         hasMore,
         loadedPages,
-        fetchNextPage
+        fetchNextPage,
+        refreshBlogs
     }
 }
