@@ -1,15 +1,14 @@
 import { Link } from "react-router-dom";
 import { Avatar } from "./BlogCard";
-import { Logout } from "./Logout";
 import { DEFAULT_THEME_KEY, THEME_PALETTES } from "../themes";
 // import { useBlogs } from "../hooks";
 
 
 export const Appbar = () => {
   const displayName = localStorage.getItem("displayName") || "User";
-  const isAdmin = localStorage.getItem("isAdmin") === "true";
   const storedThemeKey = localStorage.getItem("themeKey");
-  const avatarThemeKey = THEME_PALETTES.find((theme) => theme.key === storedThemeKey)?.key ?? DEFAULT_THEME_KEY;
+  const currentTheme = THEME_PALETTES.find((theme) => theme.key === storedThemeKey) ?? THEME_PALETTES.find((theme) => theme.key === DEFAULT_THEME_KEY)!;
+  const avatarThemeKey = currentTheme.key;
 
   return (
     <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75 shadow-sm flex items-center justify-between gap-2 px-4 py-3 sm:gap-3 sm:px-10 sm:py-4">
@@ -28,25 +27,18 @@ export const Appbar = () => {
         <Link to={"/publish"}>
           <button
             type="button"
-            className="text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-4 focus:ring-green-300 font-medium rounded-full text-xs px-3 py-2 text-center sm:text-sm sm:px-5 sm:py-2.5"
+            className="text-white focus:outline-none focus:ring-4 font-medium rounded-full text-xs px-3 py-2 text-center sm:text-sm sm:px-5 sm:py-2.5 transition-opacity hover:opacity-90"
+            style={{
+              backgroundColor: currentTheme.accent,
+              boxShadow: `0 0 0 4px ${currentTheme.softBg}`,
+            }}
           >
             New Post
           </button>
         </Link>
-        {isAdmin ? (
-          <Link to={"/admin"}>
-            <button
-              type="button"
-              className="text-white bg-slate-700 hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300 font-medium rounded-full text-xs px-3 py-2 text-center sm:text-sm sm:px-5 sm:py-2.5"
-            >
-              Admin
-            </button>
-          </Link>
-        ) : null}
         <Link to={"/account"} className="cursor-pointer" aria-label="Account">
           <Avatar size={"big"} name={displayName} themeKey={avatarThemeKey} />
         </Link>
-        <Logout />
       </div>
       
     </div>
