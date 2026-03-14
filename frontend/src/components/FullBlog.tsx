@@ -156,23 +156,23 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
             style={{ backgroundColor: theme.postBg }}
           >
             <div className="col-span-12 md:col-span-8">
-              <div className="flex min-w-0 items-start gap-2 sm:gap-3">
-                <div className="shrink-0 flex flex-col justify-start pt-1">
-                    <Avatar size={"small"} name={blog.author.name || "Anonymous"} themeKey={blog.author.themeKey} />
+              <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
+                <div className="flex min-w-0 items-start gap-2 sm:gap-3">
+                  <div className="shrink-0 flex flex-col justify-start pt-1">
+                      <Avatar size={"small"} name={blog.author.name || "Anonymous"} themeKey={blog.author.themeKey} />
+                  </div>
+                  <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">{blog.title}</div>
                 </div>
-                <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">{blog.title}</div>
-              </div>
-              <div className="text-sm text-slate-500 pt-2 sm:pt-3">Posted {formatPostedTime(blog.createdAt)}</div>
-              <div className="pt-2">
                 <button
                   type="button"
                   onClick={togglePostLike}
                   disabled={postLikeLoading}
-                  className={`rounded-full px-3 py-1 text-sm font-medium ${postLikedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"} disabled:opacity-60`}
+                  className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium ${postLikedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"} disabled:opacity-60`}
                 >
                   🍪 {postLikeCount}
                 </button>
               </div>
+              <div className="text-sm text-slate-500 pt-2 sm:pt-3">Posted {formatPostedTime(blog.createdAt)}</div>
               {blog.imageUrl ? (
                 <div className="mt-4 overflow-hidden rounded-lg">
                   <img
@@ -233,17 +233,19 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
               ) : (
                 comments.map((comment) => (
                   <div key={comment.id} className="rounded-lg bg-white p-3">
-                    <div className="text-sm font-semibold text-slate-800">
-                      {comment.author.name || "Anonymous"}
-                    </div>
-                    <div className="text-xs text-slate-500 pt-0.5">
-                      {formatPostedTime(comment.createdAt)}
-                    </div>
-                    <div className="pt-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-800">
+                          {comment.author.name || "Anonymous"}
+                        </div>
+                        <div className="text-xs text-slate-500 pt-0.5">
+                          {formatPostedTime(comment.createdAt)}
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={() => void toggleCommentLike(comment.id)}
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${comment.likedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}
+                        className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${comment.likedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}
                       >
                         🍪 {comment.likeCount || 0}
                       </button>
