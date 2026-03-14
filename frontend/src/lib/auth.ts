@@ -72,6 +72,28 @@ export function getAuthHeader() {
   return `Bearer ${token}`;
 }
 
+export function getCurrentUserId() {
+  const token = normalizeToken(localStorage.getItem("token"));
+  if (!token) {
+    return null;
+  }
+
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const payloadBase64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payloadJson = atob(payloadBase64);
+    const payload = JSON.parse(payloadJson) as { id?: unknown };
+    const userId = Number(payload?.id);
+    return Number.isFinite(userId) ? userId : null;
+  } catch {
+    return null;
+  }
+}
+
 export function clearAuthStorage() {
   localStorage.removeItem("token");
   localStorage.removeItem("displayName");

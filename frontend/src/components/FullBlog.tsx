@@ -4,7 +4,7 @@ import { Blog } from "../hooks";
 import { Appbar } from "./Appbar";
 import { Avatar } from "./BlogCard";
 import { BACKEND_URL } from "../config";
-import { getAuthHeader } from "../lib/auth";
+import { getAuthHeader, getCurrentUserId } from "../lib/auth";
 import { formatPostedTime } from "../lib/datetime";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -47,19 +47,43 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
     ),
   };
   const theme = getThemePalette(blog.author.themeKey);
+  const currentUserId = getCurrentUserId();
+  const canEditPost = typeof blog.author.id === "number" && currentUserId === blog.author.id;
   const [comments, setComments] = useState(blog.comments || []);
+  const [postTitle, setPostTitle] = useState(blog.title);
+  const [postContent, setPostContent] = useState(blog.content);
+  const [postEditedAt, setPostEditedAt] = useState(blog.editedAt || null);
   const [postLikeCount, setPostLikeCount] = useState(blog.likeCount || 0);
   const [postLikedByMe, setPostLikedByMe] = useState(Boolean(blog.likedByMe));
   const [postLikeLoading, setPostLikeLoading] = useState(false);
+  const [postEditing, setPostEditing] = useState(false);
+  const [postEditTitle, setPostEditTitle] = useState(blog.title);
+  const [postEditContent, setPostEditContent] = useState(blog.content);
+  const [postEditSaving, setPostEditSaving] = useState(false);
+  const [postEditError, setPostEditError] = useState<string | null>(null);
   const [commentInput, setCommentInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+  const [commentEditSaving, setCommentEditSaving] = useState(false);
+  const [commentEditError, setCommentEditError] = useState<string | null>(null);
 
   useEffect(() => {
     setComments(blog.comments || []);
+    setPostTitle(blog.title);
+    setPostContent(blog.content);
+    setPostEditedAt(blog.editedAt || null);
+    setPostEditTitle(blog.title);
+    setPostEditContent(blog.content);
+    setPostEditing(false);
+    setPostEditError(null);
+    setEditingCommentId(null);
+    setEditingCommentText("");
+    setCommentEditError(null);
     setPostLikeCount(blog.likeCount || 0);
     setPostLikedByMe(Boolean(blog.likedByMe));
-  }, [blog.id, blog.comments]);
+  }, [blog.id, blog.comments, blog.content, blog.editedAt, blog.likeCount, blog.likedByMe, blog.title]);
 
   async function submitComment() {
     const content = commentInput.trim();
@@ -146,6 +170,82 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
     }
   }
 
+  async function savePostEdit() {
+    const title = postEditTitle.trim();
+    const content = postEditContent.trim();
+    if (!title || !content) {
+      setPostEditError("Title and content are required.");
+      return;
+    }
+
+    setPostEditSaving(true);
+    setPostEditError(null);
+    try {
+      const response = await axios.put(
+        `${BACKEND_URL}/api/v1/blog/${blog.id}`,
+        { title, content },
+        {
+          headers: {
+            Authorization: getAuthHeader(),
+          },
+        }
+      );
+      setPostTitle(title);
+      setPostContent(content);
+      const editedAt = typeof response.data?.editedAt === "string" ? response.data.editedAt : new Date().toISOString();
+      setPostEditedAt(editedAt);
+      setPostEditing(false);
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        setPostEditError(e.response?.data?.msg || "Failed to edit post.");
+      } else {
+        setPostEditError("Failed to edit post.");
+      }
+    } finally {
+      setPostEditSaving(false);
+    }
+  }
+
+  async function saveCommentEdit(commentId: number) {
+    const content = editingCommentText.trim();
+    if (!content) {
+      setCommentEditError("Comment cannot be empty.");
+      return;
+    }
+
+    setCommentEditSaving(true);
+    setCommentEditError(null);
+    try {
+      const response = await axios.put(
+        `${BACKEND_URL}/api/v1/blog/${blog.id}/comments/${commentId}`,
+        { content },
+        {
+          headers: {
+            Authorization: getAuthHeader(),
+          },
+        }
+      );
+      const editedAt = typeof response.data?.editedAt === "string" ? response.data.editedAt : new Date().toISOString();
+      setComments((existing) =>
+        existing.map((comment) =>
+          comment.id === commentId
+            ? { ...comment, content, editedAt }
+            : comment
+        )
+      );
+      setEditingCommentId(null);
+      setEditingCommentText("");
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        setCommentEditError(e.response?.data?.msg || "Failed to edit comment.");
+      } else {
+        setCommentEditError("Failed to edit comment.");
+      }
+    } finally {
+      setCommentEditSaving(false);
+    }
+  }
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: theme.postBg }}>
       <Appbar />
@@ -161,33 +261,104 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                   <div className="shrink-0 flex flex-col justify-start pt-1">
                       <Avatar size={"small"} name={blog.author.name || "Anonymous"} themeKey={blog.author.themeKey} />
                   </div>
-                  <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">{blog.title}</div>
+                  <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">
+                    {postEditing ? (
+                      <input
+                        value={postEditTitle}
+                        onChange={(e) => setPostEditTitle(e.target.value)}
+                        className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xl font-bold text-slate-900 sm:text-3xl"
+                      />
+                    ) : (
+                      postTitle
+                    )}
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={togglePostLike}
-                  disabled={postLikeLoading}
-                  className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium ${postLikedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"} disabled:opacity-60`}
-                >
-                  🍪 {postLikeCount}
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  {canEditPost ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (postEditing) {
+                          setPostEditing(false);
+                          setPostEditTitle(postTitle);
+                          setPostEditContent(postContent);
+                          setPostEditError(null);
+                        } else {
+                          setPostEditing(true);
+                          setPostEditTitle(postTitle);
+                          setPostEditContent(postContent);
+                        }
+                      }}
+                      className="rounded-full bg-slate-100 px-3 py-1.5 text-base leading-none font-semibold text-slate-700 hover:bg-slate-200"
+                      aria-label="Edit post"
+                      title="Edit post"
+                    >
+                      ✎
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={togglePostLike}
+                    disabled={postLikeLoading}
+                    className={`rounded-full px-3 py-1 text-sm font-medium ${postLikedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"} disabled:opacity-60`}
+                  >
+                    🍪 {postLikeCount}
+                  </button>
+                </div>
               </div>
-              <div className="text-sm text-slate-500 pt-2 sm:pt-3">Posted {formatPostedTime(blog.createdAt)}</div>
+              <div className="text-sm text-slate-500 pt-2 sm:pt-3">
+                Posted {formatPostedTime(blog.createdAt)}
+                {postEditedAt ? " · Edited" : ""}
+              </div>
               {blog.imageUrl ? (
                 <div className="mt-4 overflow-hidden rounded-lg">
                   <img
                     src={getTransformedImageUrl(blog.imageUrl, { width: 1280, fit: "contain", quality: 80 })}
-                    alt={blog.title}
+                    alt={postTitle}
                     className="h-auto max-h-[70vh] w-full object-contain sm:max-h-[55vh] lg:max-h-[48vh]"
                     loading="lazy"
                   />
                 </div>
               ) : null}
-              <div className="markdown-body pt-3 text-sm leading-7 break-words sm:pt-4 sm:text-base">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {withStandaloneImagePreviewMarkdown(blog.content)}
-                </ReactMarkdown>
-              </div>
+              {postEditing ? (
+                <div className="pt-3">
+                  <textarea
+                    value={postEditContent}
+                    onChange={(e) => setPostEditContent(e.target.value)}
+                    rows={12}
+                    className="block w-full rounded-lg border border-gray-300 bg-white p-3 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                  {postEditError ? <div className="pt-2 text-sm text-red-600">{postEditError}</div> : null}
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void savePostEdit()}
+                      disabled={postEditSaving}
+                      className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                    >
+                      {postEditSaving ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPostEditing(false);
+                        setPostEditTitle(postTitle);
+                        setPostEditContent(postContent);
+                        setPostEditError(null);
+                      }}
+                      className="rounded-full bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="markdown-body pt-3 text-sm leading-7 break-words sm:pt-4 sm:text-base">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {withStandaloneImagePreviewMarkdown(postContent)}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
 
             <div className="col-span-12 md:col-span-4">
@@ -240,22 +411,75 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                         </div>
                         <div className="text-xs text-slate-500 pt-0.5">
                           {formatPostedTime(comment.createdAt)}
+                          {comment.editedAt ? " · Edited" : ""}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void toggleCommentLike(comment.id)}
-                        className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${comment.likedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}
-                      >
-                        🍪 {comment.likeCount || 0}
-                      </button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {typeof comment.author.id === "number" && comment.author.id === currentUserId ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCommentId(comment.id);
+                              setEditingCommentText(comment.content);
+                              setCommentEditError(null);
+                            }}
+                            className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                            aria-label="Edit comment"
+                            title="Edit comment"
+                          >
+                            ✎
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => void toggleCommentLike(comment.id)}
+                          className={`rounded-full px-2 py-1 text-xs font-medium ${comment.likedByMe ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}
+                        >
+                          🍪 {comment.likeCount || 0}
+                        </button>
+                      </div>
                     </div>
                     <div className="pt-2 text-sm leading-6 text-slate-700 break-words">
-                      <div className="markdown-body">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                          {withStandaloneImagePreviewMarkdown(comment.content)}
-                        </ReactMarkdown>
-                      </div>
+                      {editingCommentId === comment.id ? (
+                        <div>
+                          <textarea
+                            value={editingCommentText}
+                            onChange={(e) => setEditingCommentText(e.target.value)}
+                            rows={4}
+                            className="block w-full rounded-lg border border-gray-300 bg-white p-3 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                          />
+                          {commentEditError ? (
+                            <div className="pt-2 text-sm text-red-600">{commentEditError}</div>
+                          ) : null}
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void saveCommentEdit(comment.id)}
+                              disabled={commentEditSaving}
+                              className="rounded-full bg-slate-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-60"
+                            >
+                              {commentEditSaving ? "Saving..." : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingCommentId(null);
+                                setEditingCommentText("");
+                                setCommentEditError(null);
+                              }}
+                              className="rounded-full bg-slate-200 px-4 py-2 text-xs font-medium text-slate-700"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="markdown-body">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                            {withStandaloneImagePreviewMarkdown(comment.content)}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))

@@ -37,6 +37,7 @@ model Post {
   imageKey  String?   @map("image_key")
   published Boolean   @default(false)
   createdAt DateTime  @default(now()) @map("created_at")
+  editedAt  DateTime? @map("edited_at")
   authorId  Int       @map("author_id")
 
   author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
@@ -50,6 +51,7 @@ model Comment {
   id        Int      @id @default(autoincrement())
   content   String
   createdAt DateTime @default(now()) @map("created_at")
+  editedAt  DateTime? @map("edited_at")
   postId    Int      @map("post_id")
   authorId  Int      @map("author_id")
 

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { Prisma } from "@prisma/client";
 import { verify } from 'hono/jwt'
 import { createBlogInput, updateBlogInput } from "@blogging-app/common";
+import z from "zod";
 import { getConfig } from "../env";
 import { getPrismaClient } from "../prisma";
 
@@ -30,6 +31,9 @@ const allowedImageMimeTypes = new Set([
   "image/webp",
   "image/gif",
 ]);
+const updateCommentInput = z.object({
+  content: z.string().min(1),
+});
 
 function buildPublicImageUrl(baseUrl: string | undefined, key: string) {
   if (!baseUrl) {
@@ -165,8 +169,10 @@ blogRouter.post('/:id/comments', async (c) => {
           id: true,
           content: true,
           createdAt: true,
+          editedAt: true,
           author: {
             select: {
+              id: true,
               name: true,
             },
           },
@@ -177,9 +183,11 @@ blogRouter.post('/:id/comments', async (c) => {
           id: comment.id,
           content: comment.content,
           createdAt: comment.createdAt.toISOString(),
+          editedAt: comment.editedAt ? comment.editedAt.toISOString() : null,
           likeCount: 0,
           likedByMe: false,
           author: {
+            id: comment.author.id,
             name: comment.author.name
           }
         }
@@ -359,9 +367,18 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
         })
     })
   
-  blogRouter.put('/',async (c) => {
+  blogRouter.put('/:id',async (c) => {
+    const postId = Number(c.req.param("id"));
+    if (!Number.isFinite(postId)) {
+      c.status(400);
+      return c.json({ msg: "Invalid blog id" });
+    }
+
     const body = await c.req.json()
-    const parsed = updateBlogInput.safeParse(body)
+    const parsed = updateBlogInput.safeParse({
+      ...body,
+      id: postId,
+    })
     if(!parsed.success){
         c.status(411);
         return c.json({
@@ -371,14 +388,16 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
     const authorId = c.get("userId")
     const { databaseUrl } = getConfig(c);
     const prisma = getPrismaClient(databaseUrl);
+    const editedAt = new Date();
     const updated = await prisma.post.updateMany({
       where: {
-        id: parsed.data.id,
+        id: postId,
         authorId,
       },
       data: {
         title: parsed.data.title,
         content: parsed.data.content,
+        editedAt,
       },
     });
     if (updated.count === 0) {
@@ -388,9 +407,57 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
       });
     }
         return c.json({
-            id: parsed.data.id
+            id: postId,
+            editedAt: editedAt.toISOString(),
         })
     })
+
+  blogRouter.put('/:id/comments/:commentId', async (c) => {
+    const postId = Number(c.req.param("id"));
+    const commentId = Number(c.req.param("commentId"));
+    if (!Number.isFinite(postId) || !Number.isFinite(commentId)) {
+      c.status(400);
+      return c.json({ msg: "Invalid ids" });
+    }
+
+    const body = await c.req.json();
+    const parsed = updateCommentInput.safeParse({
+      content: typeof body?.content === "string" ? body.content.trim() : "",
+    });
+    if (!parsed.success) {
+      c.status(400);
+      return c.json({
+        msg: "Comment content is required",
+      });
+    }
+
+    const authorId = c.get("userId");
+    const { databaseUrl } = getConfig(c);
+    const prisma = getPrismaClient(databaseUrl);
+    const editedAt = new Date();
+    const updated = await prisma.comment.updateMany({
+      where: {
+        id: commentId,
+        postId,
+        authorId,
+      },
+      data: {
+        content: parsed.data.content,
+        editedAt,
+      },
+    });
+
+    if (updated.count === 0) {
+      c.status(404);
+      return c.json({ msg: "Comment not found" });
+    }
+
+    return c.json({
+      id: commentId,
+      content: parsed.data.content,
+      editedAt: editedAt.toISOString(),
+    });
+  });
 
     blogRouter.get('/bulk',async (c) => {
         const rawCursor = c.req.query("cursor");
@@ -417,8 +484,10 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
             content: true,
             imageKey: true,
             createdAt: true,
+            editedAt: true,
             author: {
               select: {
+                id: true,
                 name: true,
                 bio: true,
                 themeKey: true,
@@ -433,8 +502,10 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
                 id: true,
                 content: true,
                 createdAt: true,
+                editedAt: true,
                 author: {
                   select: {
+                    id: true,
                     name: true,
                   },
                 },
@@ -483,7 +554,9 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
           imageKey: blog.imageKey,
           imageUrl: blog.imageKey ? buildPublicImageUrl(r2PublicBaseUrl, blog.imageKey) : null,
           createdAt: blog.createdAt.toISOString(),
+          editedAt: blog.editedAt ? blog.editedAt.toISOString() : null,
           author: {
+            id: blog.author.id,
             name: blog.author.name,
             bio: blog.author.bio,
             themeKey: blog.author.themeKey
@@ -495,9 +568,11 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
             id: comment.id,
             content: comment.content,
             createdAt: comment.createdAt.toISOString(),
+            editedAt: comment.editedAt ? comment.editedAt.toISOString() : null,
             likeCount: comment._count.likes,
             likedByMe: comment.likes.length > 0,
             author: {
+              id: comment.author.id,
               name: comment.author.name
             }
           }))
@@ -528,8 +603,10 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
         content: true,
         imageKey: true,
         createdAt: true,
+        editedAt: true,
         author: {
           select: {
+            id: true,
             name: true,
             bio: true,
             themeKey: true,
@@ -543,8 +620,10 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
             id: true,
             content: true,
             createdAt: true,
+            editedAt: true,
             author: {
               select: {
+                id: true,
                 name: true,
               },
             },
@@ -594,7 +673,9 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
               imageKey: blog.imageKey,
               imageUrl: blog.imageKey ? buildPublicImageUrl(r2PublicBaseUrl, blog.imageKey) : null,
               createdAt: blog.createdAt.toISOString(),
+              editedAt: blog.editedAt ? blog.editedAt.toISOString() : null,
               author: {
+                id: blog.author.id,
                 name: blog.author.name,
                 bio: blog.author.bio,
                 themeKey: blog.author.themeKey
@@ -605,9 +686,11 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
                 id: comment.id,
                 content: comment.content,
                 createdAt: comment.createdAt.toISOString(),
+                editedAt: comment.editedAt ? comment.editedAt.toISOString() : null,
                 likeCount: comment._count.likes,
                 likedByMe: comment.likes.length > 0,
                 author: {
+                  id: comment.author.id,
                   name: comment.author.name
                 }
               }))

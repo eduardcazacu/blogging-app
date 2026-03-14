@@ -7,9 +7,11 @@ export interface Comment {
     id: number;
     content: string;
     createdAt: string;
+    editedAt?: string | null;
     likeCount?: number;
     likedByMe?: boolean;
     author: {
+        id?: number;
         name: string | null;
     };
 }
@@ -19,6 +21,7 @@ export  interface Blog{
     "title": string;
     "id": number;
     "createdAt": string;
+    "editedAt"?: string | null;
     "imageKey"?: string | null;
     "imageUrl"?: string | null;
     "likeCount"?: number;
@@ -27,6 +30,7 @@ export  interface Blog{
     "comments"?: Comment[];
     "topComments"?: Comment[];
     "author": {
+        "id"?: number;
         "name": string | null;
         "bio": string;
         "themeKey"?: string | null;
