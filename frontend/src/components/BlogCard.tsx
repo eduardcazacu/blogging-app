@@ -3,7 +3,7 @@ import { Comment } from "../hooks";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getThemePalette } from "../themes";
-import { extractStandaloneImagePreviewUrls, getTransformedImageUrl, isImageLikeUrl } from "../lib/content";
+import { extractFirstYouTubeEmbedUrl, extractStandaloneImagePreviewUrls, getTransformedImageUrl, isImageLikeUrl, isYouTubeUrl } from "../lib/content";
 import axios from "axios";
 import { BACKEND_URL } from "../config";
 import { getAuthHeader } from "../lib/auth";
@@ -65,6 +65,7 @@ export const BlogCard = ({
 
   const navigate = useNavigate();
   const theme = getThemePalette(themeKey);
+  const firstYouTubeEmbedUrl = extractFirstYouTubeEmbedUrl(content);
   const standaloneImagePreviewUrls = extractStandaloneImagePreviewUrls(content, 2).filter((url) => url !== imageUrl);
   const excerptData = (() => {
     const markdownWithoutStandaloneImages = content
@@ -84,6 +85,9 @@ export const BlogCard = ({
           return false;
         }
         if (/^<https?:\/\/\S+\.(?:png|jpe?g|gif|webp|avif)(?:[?#]\S*)?>$/i.test(trimmed)) {
+          return false;
+        }
+        if (isYouTubeUrl(trimmed)) {
           return false;
         }
         return true;
@@ -185,6 +189,18 @@ export const BlogCard = ({
               alt={title}
               loading="lazy"
               className="aspect-square w-full object-cover sm:aspect-auto sm:h-72"
+            />
+          </div>
+        ) : firstYouTubeEmbedUrl ? (
+          <div className="mt-2.5 overflow-hidden rounded-lg border border-slate-200 bg-black">
+            <iframe
+              src={firstYouTubeEmbedUrl}
+              title={`${title} video preview`}
+              loading="lazy"
+              className="aspect-video w-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
             />
           </div>
         ) : null}

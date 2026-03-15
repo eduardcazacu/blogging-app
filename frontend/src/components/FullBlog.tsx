@@ -9,7 +9,7 @@ import { formatPostedTime } from "../lib/datetime";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getThemePalette } from "../themes";
-import { getTransformedImageUrl, isImageLikeUrl, withStandaloneImagePreviewMarkdown } from "../lib/content";
+import { extractFirstYouTubeEmbedUrl, getTransformedImageUrl, isImageLikeUrl, stripLeadingFirstYouTubeUrl, withStandaloneImagePreviewMarkdown } from "../lib/content";
 
 export const FullBlog = ({ blog }: { blog: Blog }) => {
   const markdownComponents = {
@@ -68,6 +68,8 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
   const [editingCommentText, setEditingCommentText] = useState("");
   const [commentEditSaving, setCommentEditSaving] = useState(false);
   const [commentEditError, setCommentEditError] = useState<string | null>(null);
+  const firstYouTubeEmbedUrl = extractFirstYouTubeEmbedUrl(postContent);
+  const renderedPostContent = stripLeadingFirstYouTubeUrl(postContent);
 
   useEffect(() => {
     setComments(blog.comments || []);
@@ -320,6 +322,19 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                   />
                 </div>
               ) : null}
+              {firstYouTubeEmbedUrl ? (
+                <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-black">
+                  <iframe
+                    src={firstYouTubeEmbedUrl}
+                    title={`${postTitle} video`}
+                    loading="lazy"
+                    className="aspect-video w-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                </div>
+              ) : null}
               {postEditing ? (
                 <div className="pt-3">
                   <textarea
@@ -355,7 +370,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
               ) : (
                 <div className="markdown-body pt-3 text-sm leading-7 break-words sm:pt-4 sm:text-base">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {withStandaloneImagePreviewMarkdown(postContent)}
+                    {withStandaloneImagePreviewMarkdown(renderedPostContent)}
                   </ReactMarkdown>
                 </div>
               )}

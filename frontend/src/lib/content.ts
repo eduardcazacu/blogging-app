@@ -3,12 +3,57 @@ import { IMAGE_TRANSFORM_BASE_URL } from "../config";
 const IMAGE_URL_REGEX = /^https?:\/\/\S+\.(?:png|jpe?g|gif|webp|avif)(?:[?#]\S*)?$/i;
 const MARKDOWN_LINK_REGEX = /^\[[^\]]*]\((https?:\/\/\S+)\)$/i;
 const AUTOLINK_REGEX = /^<(https?:\/\/\S+)>$/i;
+const URL_CANDIDATE_REGEX = /https?:\/\/\S+/gi;
+
+function getYouTubeVideoId(url: string) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "youtu.be") {
+      const id = parsed.pathname.replace(/^\/+/, "").split("/")[0] || "";
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+    }
+
+    if (!host.endsWith("youtube.com")) {
+      return null;
+    }
+
+    if (parsed.pathname === "/watch") {
+      const id = parsed.searchParams.get("v") || "";
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+    }
+
+    const parts = parsed.pathname.replace(/^\/+/, "").split("/");
+    if (parts[0] === "embed" || parts[0] === "shorts") {
+      const id = parts[1] || "";
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 export function isImageLikeUrl(url?: string | null) {
   if (!url) {
     return false;
   }
   return IMAGE_URL_REGEX.test(url.trim());
+}
+
+export function getYouTubeEmbedUrl(url?: string | null) {
+  if (!url) {
+    return null;
+  }
+  const id = getYouTubeVideoId(url.trim());
+  if (!id) {
+    return null;
+  }
+  return `https://www.youtube.com/embed/${id}`;
+}
+
+export function isYouTubeUrl(url?: string | null) {
+  return Boolean(getYouTubeEmbedUrl(url));
 }
 
 function getStandaloneImageUrlFromLine(line: string) {
@@ -48,6 +93,74 @@ export function extractStandaloneImagePreviewUrls(input: string, max = 3) {
     }
   }
   return urls;
+}
+
+export function extractFirstYouTubeEmbedUrl(input: string) {
+  if (!input?.trim()) {
+    return null;
+  }
+
+  const lines = input.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const markdownMatch = trimmed.match(MARKDOWN_LINK_REGEX);
+    if (markdownMatch) {
+      const embed = getYouTubeEmbedUrl(markdownMatch[1]);
+      if (embed) {
+        return embed;
+      }
+    }
+
+    const autolinkMatch = trimmed.match(AUTOLINK_REGEX);
+    if (autolinkMatch) {
+      const embed = getYouTubeEmbedUrl(autolinkMatch[1]);
+      if (embed) {
+        return embed;
+      }
+    }
+
+    const candidates = trimmed.match(URL_CANDIDATE_REGEX) || [];
+    for (const candidate of candidates) {
+      const cleaned = candidate.replace(/[),.!?]+$/, "");
+      const embed = getYouTubeEmbedUrl(cleaned);
+      if (embed) {
+        return embed;
+      }
+    }
+  }
+
+  return null;
+}
+
+export function stripLeadingFirstYouTubeUrl(input: string) {
+  if (!input?.trim()) {
+    return input;
+  }
+
+  const urlRegex = /https?:\/\/\S+/gi;
+  let match = urlRegex.exec(input);
+  while (match) {
+    const raw = match[0];
+    const cleaned = raw.replace(/[),.!?]+$/, "");
+    if (!isYouTubeUrl(cleaned)) {
+      match = urlRegex.exec(input);
+      continue;
+    }
+
+    const start = match.index;
+    const end = start + cleaned.length;
+    if (input.slice(0, start).trim().length > 0) {
+      return input;
+    }
+
+    return `${input.slice(0, start)}${input.slice(end)}`.replace(/^\s*\n/, "");
+  }
+
+  return input;
 }
 
 export function withStandaloneImagePreviewMarkdown(input: string) {
