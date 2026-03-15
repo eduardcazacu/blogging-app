@@ -31,6 +31,20 @@ export const signinInput = z.object({
 
 export type SigninInput = z.infer<typeof signinInput>    
 
+export const forgotPasswordInput = z.object({
+    email: z.string().email(),
+})
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordInput>
+
+export const resetPasswordInput = z.object({
+    email: z.string().email(),
+    token: z.string().min(10),
+    password: z.string().min(6),
+})
+
+export type ResetPasswordInput = z.infer<typeof resetPasswordInput>
+
 export const createBlogInput = z.object({
     title: z.string(),
     content: z.string(),

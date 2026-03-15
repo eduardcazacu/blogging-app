@@ -8,6 +8,8 @@ import { Publish } from './pages/Publish'
 import { Account } from './pages/Account'
 import { Admin } from './pages/Admin'
 import { VerifyEmail } from './pages/VerifyEmail'
+import { ForgotPassword } from './pages/ForgotPassword'
+import { ResetPassword } from './pages/ResetPassword'
 import { getAuthHeader, refreshAccessToken } from './lib/auth'
 
 function RootRedirect() {
@@ -65,6 +67,8 @@ function App() {
           <Route path="/" element={<RootRedirect />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/signin" element={<Signin />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/blog/:id" element={<Blog />} />
           <Route path="/blogs" element={<Blogs />} />
           <Route path="/publish" element={<Publish />} />

@@ -20,6 +20,8 @@ model User {
   emailVerifiedAt              DateTime? @map("email_verified_at")
   emailVerificationTokenHash   String?   @map("email_verification_token_hash")
   emailVerificationExpiresAt   DateTime? @map("email_verification_expires_at")
+  passwordResetTokenHash       String?   @map("password_reset_token_hash")
+  passwordResetExpiresAt       DateTime? @map("password_reset_expires_at")
 
   posts      Post[]
   comments   Comment[] @relation("CommentAuthor")

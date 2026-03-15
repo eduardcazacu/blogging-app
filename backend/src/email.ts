@@ -26,6 +26,15 @@ type PendingApprovalEmailInput = {
   adminUrl?: string;
 };
 
+type PasswordResetEmailInput = {
+  apiKey: string;
+  from: string;
+  to: string;
+  appName: string;
+  resetUrl: string;
+  recipientName?: string | null;
+};
+
 export async function sendVerificationEmail(input: VerificationEmailInput) {
   const recipient = input.recipientName?.trim() || "there";
   const subject = `${input.appName}: verify your email`;
@@ -162,6 +171,55 @@ export async function sendPendingApprovalEmail(input: PendingApprovalEmailInput)
     body: JSON.stringify({
       from: input.from,
       to: input.to,
+      subject,
+      html,
+      text,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Resend API error (${response.status}): ${errorBody}`);
+  }
+}
+
+export async function sendPasswordResetEmail(input: PasswordResetEmailInput) {
+  const recipient = input.recipientName?.trim() || "there";
+  const subject = `${input.appName}: reset your password`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
+      <p>Hi ${escapeHtml(recipient)},</p>
+      <p>We received a request to reset your ${escapeHtml(input.appName)} password.</p>
+      <p style="margin: 24px 0;">
+        <a href="${escapeHtml(input.resetUrl)}" style="background: #111827; color: #ffffff; text-decoration: none; padding: 10px 16px; border-radius: 8px; display: inline-block;">
+          Reset password
+        </a>
+      </p>
+      <p>If you didn't request this, you can ignore this email.</p>
+      <p>This link expires in 1 hour.</p>
+    </div>
+  `;
+
+  const text = [
+    `Hi ${recipient},`,
+    "",
+    `We received a request to reset your ${input.appName} password.`,
+    "Reset your password with this link:",
+    input.resetUrl,
+    "",
+    "If you didn't request this, you can ignore this email.",
+    "This link expires in 1 hour.",
+  ].join("\n");
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: input.from,
+      to: [input.to],
       subject,
       html,
       text,

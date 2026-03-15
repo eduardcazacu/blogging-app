@@ -16,7 +16,7 @@ import {
 	VERIFICATION_TOKEN_TTL_MS,
 	sha256Hex
 } from "../verification";
-import { sendPendingApprovalEmail, sendVerificationEmail } from "../email";
+import { sendPasswordResetEmail, sendPendingApprovalEmail, sendVerificationEmail } from "../email";
 
 type UserRouteEnv = {
 	Bindings: {
@@ -37,6 +37,7 @@ export const userRouter = new Hono<UserRouteEnv>();
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const REFRESH_COOKIE_NAME = "refresh_token";
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 function isSecureRequest(c: Context<UserRouteEnv>) {
 	const url = new URL(c.req.url);
@@ -101,6 +102,16 @@ const verifyEmailInput = z.object({
 
 const resendVerificationInput = z.object({
 	email: z.string().email(),
+});
+
+const forgotPasswordInput = z.object({
+	email: z.string().email(),
+});
+
+const resetPasswordInput = z.object({
+	email: z.string().email(),
+	token: z.string().min(10),
+	password: z.string().min(6),
 });
 
 userRouter.post('/signup', async (c) => {
@@ -556,6 +567,137 @@ userRouter.post("/resend-verification", async (c) => {
 		console.error(e);
 		c.status(500);
 		return c.json({ msg: "Failed to resend verification email" });
+	}
+});
+
+userRouter.post("/forgot-password", async (c) => {
+	try {
+		const body = await c.req.json();
+		const parsed = forgotPasswordInput.safeParse(body);
+		if (!parsed.success) {
+			c.status(400);
+			return c.json({
+				msg: "Invalid email",
+				errors: parsed.error.flatten(),
+			});
+		}
+
+		const resendApiKey = c.env?.RESEND_API_KEY ?? process.env.RESEND_API_KEY;
+		const emailFrom = c.env?.EMAIL_FROM ?? process.env.EMAIL_FROM;
+		const frontendUrl = c.env?.FRONTEND_URL ?? process.env.FRONTEND_URL ?? "http://localhost:5173";
+		if (!resendApiKey || !emailFrom) {
+			throw new Error("RESEND_API_KEY and EMAIL_FROM are required for forgot password");
+		}
+
+		const { databaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const email = normalizeEmail(parsed.data.email);
+		const user = await prisma.user.findUnique({
+			where: { email },
+			select: {
+				id: true,
+				name: true,
+				email: true,
+			},
+		});
+
+		if (user) {
+			const resetToken = generateVerificationToken();
+			const resetTokenHash = await sha256Hex(resetToken);
+			const resetExpiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
+
+			await prisma.user.update({
+				where: { id: user.id },
+				data: {
+					passwordResetTokenHash: resetTokenHash,
+					passwordResetExpiresAt: resetExpiresAt,
+				},
+			});
+
+			const resetUrl = new URL("/reset-password", frontendUrl);
+			resetUrl.searchParams.set("token", resetToken);
+			resetUrl.searchParams.set("email", email);
+
+			await sendPasswordResetEmail({
+				apiKey: resendApiKey,
+				from: emailFrom,
+				to: user.email,
+				appName: "Eddie's Lounge",
+				resetUrl: resetUrl.toString(),
+				recipientName: user.name,
+			});
+		}
+
+		return c.json({
+			msg: "If your account exists, you will receive a password reset email shortly.",
+		});
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to process forgot password request" });
+	}
+});
+
+userRouter.post("/reset-password", async (c) => {
+	try {
+		const body = await c.req.json();
+		const parsed = resetPasswordInput.safeParse(body);
+		if (!parsed.success) {
+			c.status(400);
+			return c.json({
+				msg: "Invalid reset request",
+				errors: parsed.error.flatten(),
+			});
+		}
+
+		const { databaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const email = normalizeEmail(parsed.data.email);
+		const tokenHash = await sha256Hex(parsed.data.token);
+		const now = new Date();
+		const user = await prisma.user.findUnique({
+			where: { email },
+			select: {
+				id: true,
+				passwordResetTokenHash: true,
+				passwordResetExpiresAt: true,
+			},
+		});
+
+		const tokenMatches = user?.passwordResetTokenHash === tokenHash;
+		const tokenExpired = !user?.passwordResetExpiresAt || user.passwordResetExpiresAt < now;
+		if (!user || !tokenMatches || tokenExpired) {
+			c.status(400);
+			return c.json({ msg: "Invalid or expired password reset link." });
+		}
+
+		const nextPasswordHash = await hashPassword(parsed.data.password);
+		await prisma.$transaction([
+			prisma.user.update({
+				where: { id: user.id },
+				data: {
+					password: nextPasswordHash,
+					passwordResetTokenHash: null,
+					passwordResetExpiresAt: null,
+				},
+			}),
+			prisma.session.updateMany({
+				where: {
+					userId: user.id,
+					revokedAt: null,
+				},
+				data: {
+					revokedAt: now,
+				},
+			}),
+		]);
+		clearRefreshTokenCookie(c);
+
+		return c.json({ msg: "Password reset successful. Please sign in again." });
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to reset password" });
 	}
 });
 
