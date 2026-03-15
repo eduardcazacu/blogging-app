@@ -75,7 +75,7 @@ export function getTransformedImageUrl(
   }
 
   const width = Math.max(200, Math.min(1920, Math.round(options.width)));
-  const quality = Math.max(50, Math.min(90, options.quality ?? 78));
+  const quality = Math.max(50, Math.min(100, options.quality ?? 90));
   const fit = options.fit ?? "cover";
   if (!IMAGE_TRANSFORM_BASE_URL) {
     return originalUrl;

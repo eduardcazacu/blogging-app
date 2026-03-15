@@ -181,7 +181,7 @@ export const BlogCard = ({
         {imageUrl ? (
           <div className="mt-2.5 overflow-hidden rounded-lg">
             <img
-              src={getTransformedImageUrl(imageUrl, { width: 920, fit: "cover", quality: 76 })}
+              src={getTransformedImageUrl(imageUrl, { width: 920, fit: "cover", quality: 95 })}
               alt={title}
               loading="lazy"
               className="aspect-square w-full object-cover sm:aspect-auto sm:h-72"

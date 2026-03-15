@@ -293,7 +293,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                       aria-label="Edit post"
                       title="Edit post"
                     >
-                      ✎
+                      ✏️
                     </button>
                   ) : null}
                   <button
@@ -313,7 +313,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
               {blog.imageUrl ? (
                 <div className="mt-4 overflow-hidden rounded-lg">
                   <img
-                    src={getTransformedImageUrl(blog.imageUrl, { width: 1280, fit: "contain", quality: 80 })}
+                    src={getTransformedImageUrl(blog.imageUrl, { width: 1280, fit: "contain", quality: 98 })}
                     alt={postTitle}
                     className="h-auto max-h-[70vh] w-full object-contain sm:max-h-[55vh] lg:max-h-[48vh]"
                     loading="lazy"
@@ -427,7 +427,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
                             aria-label="Edit comment"
                             title="Edit comment"
                           >
-                            ✎
+                            ✏️
                           </button>
                         ) : null}
                         <button

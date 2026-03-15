@@ -9,7 +9,7 @@ import { getTransformedImageUrl } from "../lib/content"
 const MAX_IMAGE_WIDTH = 1920;
 const MAX_IMAGE_HEIGHT = 1080;
 const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
-const TARGET_NON_GIF_BYTES = 1_200_000;
+const TARGET_NON_GIF_BYTES = 2_400_000;
 const POST_DRAFT_STORAGE_KEY = "publishPostDraft";
 
 export const Publish = () => {
@@ -98,7 +98,7 @@ export const Publish = () => {
         let workingWidth = Math.max(1, Math.round(image.naturalWidth * baseScale));
         let workingHeight = Math.max(1, Math.round(image.naturalHeight * baseScale));
         let bestBlob: Blob | null = null;
-        const qualityLevels = [0.82, 0.74, 0.66, 0.58];
+        const qualityLevels = [0.96, 0.9, 0.84, 0.78];
 
         for (let pass = 0; pass < 4; pass++) {
           const canvas = document.createElement("canvas");
@@ -213,7 +213,7 @@ export const Publish = () => {
                   {imageKey && imageUrl ? (
                     <div className="mt-3 rounded-lg border border-slate-200 p-2">
                       <img
-                        src={getTransformedImageUrl(imageUrl, { width: 1200, fit: "contain", quality: 80 })}
+                        src={getTransformedImageUrl(imageUrl, { width: 1200, fit: "contain", quality: 98 })}
                         alt={title || "Uploaded post image"}
                         className="h-auto max-h-72 w-full rounded-md bg-slate-100 object-contain"
                         loading="lazy"
