@@ -5,6 +5,7 @@ import { createBlogInput, updateBlogInput } from "@blogging-app/common";
 import z from "zod";
 import { getConfig } from "../env";
 import { getPrismaClient } from "../prisma";
+import { notifyFollowersOfNewPost } from "../push";
 
 export const blogRouter = new Hono<{
 	Bindings: {
@@ -359,6 +360,28 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
       select: {
         id: true,
         imageKey: true,
+      },
+    });
+    const author = await prisma.user.findUnique({
+      where: {
+        id: authorId,
+      },
+      select: {
+        name: true,
+      },
+    });
+    const authorName = (author?.name?.trim()) || "Someone";
+    const config = getConfig(c);
+    void notifyFollowersOfNewPost({
+      databaseUrl,
+      authorId,
+      authorName,
+      postId: blog.id,
+      postTitle: parsed.data.title,
+      vapidConfig: {
+        vapidPublicKey: config.vapidPublicKey,
+        vapidPrivateKey: config.vapidPrivateKey,
+        vapidSubject: config.vapidSubject,
       },
     });
         return c.json({

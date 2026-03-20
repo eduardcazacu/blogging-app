@@ -22,14 +22,31 @@ model User {
   emailVerificationExpiresAt   DateTime? @map("email_verification_expires_at")
   passwordResetTokenHash       String?   @map("password_reset_token_hash")
   passwordResetExpiresAt       DateTime? @map("password_reset_expires_at")
+  notificationsEnabled         Boolean   @default(true) @map("notifications_enabled")
 
   posts      Post[]
   comments   Comment[] @relation("CommentAuthor")
   postLikes  PostLike[]
   commentLikes CommentLike[]
   sessions   Session[]
+  pushSubscriptions UserPushSubscription[]
 
   @@map("users")
+}
+
+model UserPushSubscription {
+  id       Int      @id @default(autoincrement())
+  userId   Int      @map("user_id")
+  endpoint String   @unique @map("endpoint")
+  p256dh   String   @map("p256dh")
+  auth     String   @map("auth")
+  userAgent String? @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_push_subscriptions")
+  @@index([userId])
 }
 
 model Post {

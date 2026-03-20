@@ -17,18 +17,59 @@ type Profile = {
   name: string | null;
   bio: string;
   themeKey?: string | null;
+  notificationsEnabled: boolean;
   isAdmin: boolean;
 };
+
+function base64ToUint8Array(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.length % 4 === 0 ? normalized : `${normalized}${"=".repeat(4 - (normalized.length % 4))}`;
+  const binary = atob(padded);
+  const result = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    result[i] = binary.charCodeAt(i);
+  }
+  return result;
+}
 
 export const Account = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingNotifications, setSavingNotifications] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [bio, setBio] = useState("");
   const [themeKey, setThemeKey] = useState<ThemeKey>(DEFAULT_THEME_KEY);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
+  const [deviceSubscribed, setDeviceSubscribed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
+
+  const remainingChars = useMemo(() => BIO_MAX_LENGTH - bio.length, [bio.length]);
+
+  async function refreshPushState() {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      setPushSupported(false);
+      return;
+    }
+
+    setPushSupported(!!("PushManager" in window) && !!("Notification" in window));
+    if (typeof Notification !== "undefined") {
+      setPushPermission(Notification.permission);
+      if (Notification.permission !== "granted") {
+        setNotificationsEnabled(false);
+      }
+    }
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      setDeviceSubscribed(Boolean(subscription));
+    } catch {
+      setDeviceSubscribed(false);
+    }
+  }
 
   useEffect(() => {
     async function loadProfile() {
@@ -41,6 +82,7 @@ export const Account = () => {
         const user = response.data?.user as Profile;
         setProfile(user);
         setBio(user?.bio ?? "");
+        setNotificationsEnabled(Boolean(user?.notificationsEnabled));
         const selectedTheme = THEME_PALETTES.find((theme) => theme.key === user?.themeKey)?.key ?? DEFAULT_THEME_KEY;
         setThemeKey(selectedTheme);
         localStorage.setItem("userEmail", user.email.toLowerCase());
@@ -62,13 +104,16 @@ export const Account = () => {
         }
       } finally {
         setLoading(false);
+        await refreshPushState();
       }
     }
 
     loadProfile();
+    return () => {
+      setError(null);
+      setSuccess(null);
+    };
   }, []);
-
-  const remainingChars = useMemo(() => BIO_MAX_LENGTH - bio.length, [bio.length]);
 
   async function saveBio() {
     setSaving(true);
@@ -106,6 +151,132 @@ export const Account = () => {
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function getPushPublicKey() {
+    const response = await axios.get(`${BACKEND_URL}/api/v1/user/me/push/key`, {
+      headers: {
+        Authorization: getAuthHeader(),
+      },
+    });
+    const publicKey = typeof response.data?.publicKey === "string" ? response.data.publicKey.trim() : "";
+    if (!publicKey) {
+      throw new Error("Push key is not available");
+    }
+    return publicKey;
+  }
+
+  async function subscribePushDevice() {
+    if (!("serviceWorker" in navigator) || !("Notification" in window) || !("PushManager" in window)) {
+      throw new Error("Push is not supported on this browser.");
+    }
+
+    if (Notification.permission !== "granted") {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        throw new Error("Notification permission denied.");
+      }
+    }
+    setPushPermission(Notification.permission);
+
+    const publicKey = await getPushPublicKey();
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64ToUint8Array(publicKey),
+      });
+    }
+    const subscriptionData = subscription.toJSON();
+    const keys = subscriptionData.keys as
+      | { p256dh?: unknown; auth?: unknown }
+      | undefined;
+    const p256dh = typeof keys?.p256dh === "string" ? keys.p256dh : "";
+    const auth = typeof keys?.auth === "string" ? keys.auth : "";
+    if (!subscriptionData.endpoint || !p256dh || !auth) {
+      throw new Error("Invalid push subscription");
+    }
+
+    await axios.post(
+      `${BACKEND_URL}/api/v1/user/me/push/subscribe`,
+      {
+        endpoint: subscriptionData.endpoint,
+        keys: {
+          p256dh,
+          auth,
+        },
+        userAgent: navigator.userAgent,
+      },
+      {
+        headers: {
+          Authorization: getAuthHeader(),
+        },
+      }
+    );
+  }
+
+  async function unsubscribePushDevice() {
+    if (!("serviceWorker" in navigator)) {
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (subscription) {
+      await subscription.unsubscribe();
+    }
+    await axios.post(
+      `${BACKEND_URL}/api/v1/user/me/push/unsubscribe`,
+      {},
+      { headers: { Authorization: getAuthHeader() } }
+    );
+  }
+
+  async function toggleNotificationSetting(checked: boolean) {
+    if (!pushSupported) {
+      setError("Push notifications are not supported on this device.");
+      return;
+    }
+    setSavingNotifications(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      if (checked) {
+        await subscribePushDevice();
+      } else {
+        await unsubscribePushDevice();
+      }
+
+      await axios.put(
+        `${BACKEND_URL}/api/v1/user/me/notifications`,
+        { notificationsEnabled: checked },
+        { headers: { Authorization: getAuthHeader() } }
+      );
+
+      setNotificationsEnabled(checked);
+      await refreshPushState();
+      if (checked) {
+        setSuccess("Push notifications enabled.");
+      } else {
+        setSuccess("Push notifications disabled.");
+      }
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        if (isAuthErrorStatus(e.response?.status)) {
+          clearAuthStorage();
+          setAuthExpired(true);
+          return;
+        }
+        setError(e.response?.data?.msg || "Could not update notification settings");
+      } else if (e instanceof Error) {
+        setError(e.message);
+      } else {
+        setError("Could not update notification settings");
+      }
+    } finally {
+      setSavingNotifications(false);
     }
   }
 
@@ -163,8 +334,8 @@ export const Account = () => {
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {THEME_PALETTES.map((theme) => (
                       <button
-                        key={theme.key}
                         type="button"
+                        key={theme.key}
                         onClick={() => setThemeKey(theme.key)}
                         className={`rounded-lg border p-2 text-left transition-colors ${
                           themeKey === theme.key ? "ring-2 ring-offset-1" : ""
@@ -183,6 +354,30 @@ export const Account = () => {
                         </div>
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-slate-200">
+                  <label className="mb-2 block text-sm font-semibold text-gray-900">
+                    Notifications
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={notificationsEnabled}
+                      disabled={!pushSupported || savingNotifications}
+                      onChange={(e) => {
+                        void toggleNotificationSetting(e.target.checked);
+                      }}
+                    />
+                    <span className="text-sm text-slate-700">
+                      Notify me when someone posts a new blog
+                    </span>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {pushSupported
+                      ? `Permission: ${pushPermission}. Device subscribed: ${deviceSubscribed ? "yes" : "no"}.`
+                      : "Push notifications are not supported on this browser."}
                   </div>
                 </div>
 

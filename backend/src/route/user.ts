@@ -8,6 +8,7 @@ import { getConfig } from "../env";
 import { getAdminEmails, isAdminEmail } from "../admin-config";
 import { getPrismaClient } from "../prisma";
 import { hashPassword, isBcryptHash, verifyPassword } from "../password";
+import { sendTestNotificationToUser } from "../push";
 import {
 	generateVerificationToken,
 	getVerificationExpiryDate,
@@ -26,6 +27,9 @@ type UserRouteEnv = {
 		RESEND_API_KEY?: string,
 		EMAIL_FROM?: string,
 		FRONTEND_URL?: string,
+		VAPID_PUBLIC_KEY?: string,
+		VAPID_PRIVATE_KEY?: string,
+		VAPID_SUBJECT?: string,
 	},
 	Variables: {
 		userId: number
@@ -112,6 +116,28 @@ const resetPasswordInput = z.object({
 	email: z.string().email(),
 	token: z.string().min(10),
 	password: z.string().min(6),
+});
+
+const pushSubscriptionInput = z.object({
+	endpoint: z.string().min(1),
+	keys: z.object({
+		p256dh: z.string().min(1),
+		auth: z.string().min(1),
+	}),
+	userAgent: z.string().optional(),
+});
+
+const pushUnsubscribeInput = z.object({
+	endpoint: z.string().optional(),
+});
+
+const notificationSettingsInput = z.object({
+	notificationsEnabled: z.boolean(),
+});
+
+const testNotificationInput = z.object({
+	title: z.string().min(1).max(120).optional(),
+	body: z.string().min(1).max(500).optional(),
 });
 
 userRouter.post('/signup', async (c) => {
@@ -701,6 +727,191 @@ userRouter.post("/reset-password", async (c) => {
 	}
 });
 
+userRouter.get("/me/push/key", async (c) => {
+	try {
+		const { vapidPublicKey } = getConfig(c);
+		if (!vapidPublicKey) {
+			c.status(500);
+			return c.json({ msg: "Push notifications are not configured." });
+		}
+
+		return c.json({ publicKey: vapidPublicKey });
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to load push key." });
+	}
+});
+
+userRouter.post("/me/push/subscribe", async (c) => {
+	try {
+		const body = await c.req.json();
+		const parsed = pushSubscriptionInput.safeParse(body);
+		if (!parsed.success) {
+			c.status(400);
+			return c.json({
+				msg: "Invalid push subscription payload",
+				errors: parsed.error.flatten(),
+			});
+		}
+
+		const { databaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const userId = c.get("userId");
+		await prisma.userPushSubscription.upsert({
+			where: {
+				endpoint: parsed.data.endpoint,
+			},
+			update: {
+				userId,
+				p256dh: parsed.data.keys.p256dh,
+				auth: parsed.data.keys.auth,
+				userAgent: parsed.data.userAgent?.trim() || null,
+			},
+			create: {
+				userId,
+				endpoint: parsed.data.endpoint,
+				p256dh: parsed.data.keys.p256dh,
+				auth: parsed.data.keys.auth,
+				userAgent: parsed.data.userAgent?.trim() || null,
+			},
+		});
+		return c.json({ msg: "Push subscription stored." });
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to store push subscription." });
+	}
+});
+
+userRouter.post("/me/push/unsubscribe", async (c) => {
+	try {
+		const body = await c.req.json();
+		const parsed = pushUnsubscribeInput.safeParse(body);
+		if (!parsed.success) {
+			c.status(400);
+			return c.json({
+				msg: "Invalid unsubscribe payload",
+				errors: parsed.error.flatten(),
+			});
+		}
+
+		const { databaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const userId = c.get("userId");
+		const deleteResult = parsed.data.endpoint
+			? await prisma.userPushSubscription.deleteMany({
+				where: {
+					userId,
+					endpoint: parsed.data.endpoint,
+				},
+			  })
+			: await prisma.userPushSubscription.deleteMany({
+				where: {
+					userId,
+				},
+			  });
+
+		return c.json({
+			msg: "Push subscriptions removed.",
+			removed: deleteResult.count,
+		});
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to remove push subscription." });
+	}
+});
+
+userRouter.put("/me/notifications", async (c) => {
+	try {
+		const body = await c.req.json();
+		const parsed = notificationSettingsInput.safeParse(body);
+		if (!parsed.success) {
+			c.status(400);
+			return c.json({
+				msg: "Invalid notifications settings payload",
+				errors: parsed.error.flatten(),
+			});
+		}
+
+		const { databaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const userId = c.get("userId");
+		const updatedUser = await prisma.user.update({
+			where: { id: userId },
+			data: {
+				notificationsEnabled: parsed.data.notificationsEnabled,
+			},
+			select: {
+				id: true,
+				notificationsEnabled: true,
+			},
+		});
+
+		if (!parsed.data.notificationsEnabled) {
+			await prisma.userPushSubscription.deleteMany({
+				where: {
+					userId,
+				},
+			});
+		}
+
+		return c.json({ notificationsEnabled: updatedUser.notificationsEnabled });
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to update notification settings." });
+	}
+});
+
+userRouter.post("/me/push/test", async (c) => {
+	try {
+		const body = await c.req.json();
+		const parsed = testNotificationInput.safeParse(body);
+		if (!parsed.success) {
+			c.status(400);
+			return c.json({
+				msg: "Invalid test notification payload",
+				errors: parsed.error.flatten(),
+			});
+		}
+
+		const { databaseUrl, vapidPublicKey, vapidPrivateKey, vapidSubject } = getConfig(c);
+		const userId = c.get("userId");
+		await sendTestNotificationToUser({
+			databaseUrl,
+			userId,
+			vapidConfig: {
+				vapidPublicKey,
+				vapidPrivateKey,
+				vapidSubject,
+			},
+			title: parsed.data.title,
+			body: parsed.data.body,
+		});
+
+		return c.json({ msg: "Test notification sent." });
+	} catch (e) {
+		if (e instanceof Error) {
+			const msg = e.message || "Failed to send test notification.";
+			if (
+				msg.includes("Push notifications are not configured") ||
+				msg.includes("Push notifications are disabled") ||
+				msg.includes("No active device") ||
+				msg.includes("No valid device")
+			) {
+				c.status(400);
+				return c.json({ msg });
+			}
+		}
+
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to send test notification." });
+	}
+});
+
 userRouter.get("/me", async (c) => {
 	try {
 		const { databaseUrl } = getConfig(c);
@@ -715,7 +926,8 @@ userRouter.get("/me", async (c) => {
 				email: true,
 				name: true,
 				bio: true,
-				themeKey: true
+				themeKey: true,
+				notificationsEnabled: true,
 			}
 		});
 		if (!user) {

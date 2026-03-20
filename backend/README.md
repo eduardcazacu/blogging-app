@@ -5,13 +5,17 @@
    - `DATABASE_URL=postgres://postgres:postgres@localhost:5432/blogging_app`
    - `JWT_SECRET=your-local-secret`
    - `ADMIN_EMAILS=admin@example.com` (comma-separated for multiple admins)
-   - `RESEND_API_KEY=re_xxx`
-   - `EMAIL_FROM=Eddie's Lounge <onboarding@resend.dev>`
-   - `FRONTEND_URL=http://localhost:5173`
+ - `RESEND_API_KEY=re_xxx`
+  - `EMAIL_FROM=Eddie's Lounge <onboarding@resend.dev>`
+  - `FRONTEND_URL=http://localhost:5173`
+  - `VAPID_PUBLIC_KEY=<your-web-push-public-key>`
+  - `VAPID_PRIVATE_KEY=<your-web-push-private-key>`
+  - `VAPID_SUBJECT=mailto:you@example.com`
 3. Install and run:
 
 ```bash
 npm install
+npm run prisma:generate
 npm run dev
 ```
 
@@ -33,7 +37,7 @@ Then run:
 
 ```bash
 npm run prisma:generate
-npm run prisma:migrate -- --name init_prisma
+npm run prisma:deploy
 ```
 
 ## Email Verification
