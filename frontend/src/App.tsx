@@ -115,13 +115,13 @@ function App() {
     try {
       await promptForNotificationPermissionOnFirstOpenAfterUpdate(getAuthHeader());
       if (shouldPromptForNotificationPermission()) {
-        closePushPermissionPrompt();
+        setShowPushPermissionPrompt(true);
       } else {
         setShowPushPermissionPrompt(false);
       }
     } catch {
       // Ignore startup push errors.
-      closePushPermissionPrompt();
+      setShowPushPermissionPrompt(false);
     } finally {
       setIsPromptingPushPermission(false);
     }

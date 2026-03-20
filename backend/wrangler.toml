@@ -14,9 +14,6 @@ bucket_name = "eddies-lounge-images"
 # Public dev URL for the bucket domain, e.g. https://pub-xxxxxxxx.r2.dev
 # Add this same var in the Cloudflare dashboard or via Wrangler for each environment.
 R2_PUBLIC_BASE_URL = "https://images.lounge.eduardcazacu.com"
-VAPID_PUBLIC_KEY = "replace-me"
-VAPID_PRIVATE_KEY = "replace-me"
-VAPID_SUBJECT = "mailto:replace-me@example.com"
 
 # [[d1_databases]]
 # binding = "DB"

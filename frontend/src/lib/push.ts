@@ -1,7 +1,7 @@
 import axios from "axios";
 import { BACKEND_URL } from "../config";
 
-const PUSH_PERMISSION_PROMPT_VERSION = "2026-03-20-notifications";
+const PUSH_PERMISSION_PROMPT_VERSION = "2026-03-20-notifications-v2";
 const PUSH_PERMISSION_PROMPT_KEY = "push.permissionPromptVersion";
 
 function base64ToUint8Array(value: string) {
