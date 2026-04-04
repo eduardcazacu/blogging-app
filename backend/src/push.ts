@@ -135,6 +135,14 @@ function buildBroadcastPayload(title: string, body: string) {
   });
 }
 
+function getPushDeliveryOptions(topic: string) {
+  return {
+    TTL: 60 * 60,
+    urgency: "normal" as const,
+    topic,
+  };
+}
+
 export async function notifyFollowersOfNewPost(input: NewPostNotificationInput) {
   if (!input.vapidConfig.vapidPublicKey || !input.vapidConfig.vapidPrivateKey) {
     console.warn("[push] skipping new-post notification because VAPID config is missing", {
@@ -202,7 +210,11 @@ export async function notifyFollowersOfNewPost(input: NewPostNotificationInput) 
           auth: subscription.auth,
         },
       };
-      return webPush.sendNotification(pushSubscription, payload).then(() => ({
+      return webPush.sendNotification(
+        pushSubscription,
+        payload,
+        getPushDeliveryOptions(`post-${input.postId}`)
+      ).then(() => ({
         subscriptionId: subscription.id,
         endpoint: summarizeSubscriptionEndpoint(subscription.endpoint),
         success: true as const,
@@ -328,7 +340,11 @@ export async function sendTestNotificationToUser(input: TestNotificationInput) {
         auth: subscription.auth,
       },
     };
-    return webPush.sendNotification(pushSubscription, payload).then(() => ({
+    return webPush.sendNotification(
+      pushSubscription,
+      payload,
+      getPushDeliveryOptions(`test-${input.userId}`)
+    ).then(() => ({
       subscriptionId: subscription.id,
       endpoint: summarizeSubscriptionEndpoint(subscription.endpoint),
       statusCode: null as number | null,
@@ -446,7 +462,11 @@ export async function sendBroadcastNotification(input: BroadcastNotificationInpu
         auth: subscription.auth,
       },
     };
-    return webPush.sendNotification(pushSubscription, payload).then(() => ({
+    return webPush.sendNotification(
+      pushSubscription,
+      payload,
+      getPushDeliveryOptions("admin-broadcast")
+    ).then(() => ({
       subscriptionId: subscription.id,
       endpoint: summarizeSubscriptionEndpoint(subscription.endpoint),
       statusCode: null as number | null,

@@ -379,7 +379,7 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
       hasVapidPrivateKey: Boolean(config.vapidPrivateKey),
       hasVapidSubject: Boolean(config.vapidSubject),
     });
-    void notifyFollowersOfNewPost({
+    const notificationJob = notifyFollowersOfNewPost({
       databaseUrl,
       authorId,
       authorName,
@@ -391,6 +391,7 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
         vapidSubject: config.vapidSubject,
       },
     });
+    c.executionCtx.waitUntil(notificationJob);
         return c.json({
             id: blog.id,
             imageUrl: blog.imageKey ? buildPublicImageUrl(r2PublicBaseUrl, blog.imageKey) : null

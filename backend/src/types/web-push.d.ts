@@ -26,6 +26,8 @@ declare module "web-push" {
       privateKey: string;
     };
     TTL?: number;
+    urgency?: "very-low" | "low" | "normal" | "high";
+    topic?: string;
   }
 
   function sendNotification(
