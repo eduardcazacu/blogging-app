@@ -5,6 +5,8 @@ import { getConfig } from "../env";
 import { getAdminEmails, isAdminEmail } from "../admin-config";
 import { getPrismaClient } from "../prisma";
 import { sendWelcomeEmail } from "../email";
+import { sendBroadcastNotification } from "../push";
+import z from "zod";
 
 type AdminEnv = {
   Bindings: {
@@ -14,6 +16,9 @@ type AdminEnv = {
     RESEND_API_KEY?: string;
     EMAIL_FROM?: string;
     FRONTEND_URL?: string;
+    VAPID_PUBLIC_KEY?: string;
+    VAPID_PRIVATE_KEY?: string;
+    VAPID_SUBJECT?: string;
   };
   Variables: {
     userId: number;
@@ -22,6 +27,11 @@ type AdminEnv = {
 };
 
 export const adminRouter = new Hono<AdminEnv>();
+
+const broadcastNotificationInput = z.object({
+  title: z.string().trim().min(1).max(120),
+  body: z.string().trim().min(1).max(500),
+});
 
 adminRouter.use("/*", async (c, next) => {
   try {
@@ -214,5 +224,52 @@ adminRouter.put("/reject/:id", async (c) => {
     console.error(e);
     c.status(500);
     return c.json({ msg: "Failed to reject user" });
+  }
+});
+
+adminRouter.post("/push/broadcast", async (c) => {
+  try {
+    const body = await c.req.json();
+    const parsed = broadcastNotificationInput.safeParse(body);
+    if (!parsed.success) {
+      c.status(400);
+      return c.json({
+        msg: "Invalid broadcast notification payload",
+        errors: parsed.error.flatten(),
+      });
+    }
+
+    const { databaseUrl, vapidPublicKey, vapidPrivateKey, vapidSubject } = getConfig(c);
+    const result = await sendBroadcastNotification({
+      databaseUrl,
+      title: parsed.data.title,
+      body: parsed.data.body,
+      vapidConfig: {
+        vapidPublicKey,
+        vapidPrivateKey,
+        vapidSubject,
+      },
+    });
+
+    return c.json({
+      msg: `Broadcast sent to ${result.delivered} device${result.delivered === 1 ? "" : "s"}.`,
+      result,
+    });
+  } catch (e) {
+    if (e instanceof Error) {
+      const msg = e.message || "Failed to send broadcast notification.";
+      if (
+        msg.includes("Push notifications are not configured") ||
+        msg.includes("No subscribed users available") ||
+        msg.includes("Broadcast delivery failed")
+      ) {
+        c.status(400);
+        return c.json({ msg });
+      }
+    }
+
+    console.error(e);
+    c.status(500);
+    return c.json({ msg: "Failed to send broadcast notification." });
   }
 });

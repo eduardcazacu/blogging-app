@@ -372,6 +372,13 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
     });
     const authorName = (author?.name?.trim()) || "Someone";
     const config = getConfig(c);
+    console.log("[push] post created, scheduling notification fan-out", {
+      postId: blog.id,
+      authorId,
+      hasVapidPublicKey: Boolean(config.vapidPublicKey),
+      hasVapidPrivateKey: Boolean(config.vapidPrivateKey),
+      hasVapidSubject: Boolean(config.vapidSubject),
+    });
     void notifyFollowersOfNewPost({
       databaseUrl,
       authorId,

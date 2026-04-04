@@ -15,6 +15,10 @@ type PendingUser = {
 export const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastBody, setBroadcastBody] = useState("");
+  const [sendingBroadcast, setSendingBroadcast] = useState(false);
+  const [broadcastMessage, setBroadcastMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
 
@@ -100,6 +104,45 @@ export const Admin = () => {
     }
   }
 
+  async function sendBroadcast() {
+    const title = broadcastTitle.trim();
+    const body = broadcastBody.trim();
+    if (!title || !body) {
+      setBroadcastMessage("Title and message are required.");
+      return;
+    }
+
+    setSendingBroadcast(true);
+    setBroadcastMessage(null);
+    try {
+      const response = await axios.post(
+        `${BACKEND_URL}/api/v1/admin/push/broadcast`,
+        { title, body },
+        {
+          headers: {
+            Authorization: getAuthHeader(),
+          },
+        }
+      );
+      setBroadcastMessage(response.data?.msg || "Broadcast sent.");
+      setBroadcastTitle("");
+      setBroadcastBody("");
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        if (isAuthErrorStatus(e.response?.status)) {
+          clearAuthStorage();
+          setAuthExpired(true);
+          return;
+        }
+        setBroadcastMessage(e.response?.data?.msg || "Failed to send broadcast notification");
+      } else {
+        setBroadcastMessage("Failed to send broadcast notification");
+      }
+    } finally {
+      setSendingBroadcast(false);
+    }
+  }
+
   if (authExpired) {
     return <Navigate to="/signin" replace />;
   }
@@ -122,6 +165,50 @@ export const Admin = () => {
 
           {loading ? <p className="pt-4 text-slate-600">Loading pending accounts...</p> : null}
           {error ? <p className="pt-4 text-red-600">{error}</p> : null}
+
+          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5">
+            <div className="text-lg font-semibold text-slate-900">Push Broadcast</div>
+            <p className="mt-1 text-sm text-slate-600">
+              Send a custom push notification to every subscribed user with notifications enabled.
+            </p>
+            <div className="mt-4 grid gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Title</label>
+                <input
+                  type="text"
+                  value={broadcastTitle}
+                  maxLength={120}
+                  onChange={(e) => setBroadcastTitle(e.target.value)}
+                  className="block w-full rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-900"
+                  placeholder="Notification title"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Message</label>
+                <textarea
+                  value={broadcastBody}
+                  maxLength={500}
+                  rows={4}
+                  onChange={(e) => setBroadcastBody(e.target.value)}
+                  className="block w-full rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-900"
+                  placeholder="Notification message"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={sendBroadcast}
+                  disabled={sendingBroadcast}
+                  className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {sendingBroadcast ? "Sending..." : "Send push notification"}
+                </button>
+                {broadcastMessage ? (
+                  <span className="text-sm text-slate-700">{broadcastMessage}</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
 
           {!loading && !error && pendingUsers.length === 0 ? (
             <p className="pt-4 text-slate-600">No pending accounts.</p>
