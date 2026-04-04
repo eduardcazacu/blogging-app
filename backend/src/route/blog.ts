@@ -5,7 +5,7 @@ import { createBlogInput, updateBlogInput } from "@blogging-app/common";
 import z from "zod";
 import { getConfig } from "../env";
 import { getPrismaClient } from "../prisma";
-import { notifyFollowersOfNewPost } from "../push";
+import { notifyFollowersOfNewPost, notifyPostAuthorOfReply } from "../push";
 
 export const blogRouter = new Hono<{
 	Bindings: {
@@ -149,12 +149,16 @@ blogRouter.post('/:id/comments', async (c) => {
     }
 
     const authorId = c.get("userId");
-    const { databaseUrl } = getConfig(c);
+    const { databaseUrl, vapidPublicKey, vapidPrivateKey, vapidSubject } = getConfig(c);
     const prisma = getPrismaClient(databaseUrl);
     try {
       const post = await prisma.post.findUnique({
         where: { id: postId },
-        select: { id: true },
+        select: {
+          id: true,
+          title: true,
+          authorId: true,
+        },
       });
       if (!post) {
         c.status(404);
@@ -179,6 +183,21 @@ blogRouter.post('/:id/comments', async (c) => {
           },
         },
       });
+      const replyNotificationJob = notifyPostAuthorOfReply({
+        databaseUrl,
+        postId: post.id,
+        postTitle: post.title,
+        postAuthorId: post.authorId,
+        commentId: comment.id,
+        commentAuthorId: authorId,
+        commentAuthorName: comment.author.name?.trim() || "Someone",
+        vapidConfig: {
+          vapidPublicKey,
+          vapidPrivateKey,
+          vapidSubject,
+        },
+      });
+      c.executionCtx.waitUntil(replyNotificationJob);
       return c.json({
         comment: {
           id: comment.id,

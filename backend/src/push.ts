@@ -31,6 +31,17 @@ type BroadcastNotificationInput = {
   vapidConfig: VapidConfig;
 };
 
+type PostReplyNotificationInput = {
+  databaseUrl: string;
+  postId: number;
+  postTitle: string;
+  postAuthorId: number;
+  commentId: number;
+  commentAuthorId: number;
+  commentAuthorName: string;
+  vapidConfig: VapidConfig;
+};
+
 type PushDeliverySuccess = {
   subscriptionId: number;
   endpoint: string;
@@ -131,6 +142,17 @@ function buildBroadcastPayload(title: string, body: string) {
     body: body.trim(),
     data: {
       openUrl: "/blogs",
+    },
+  });
+}
+
+function buildPostReplyPayload(postId: number, commentAuthorName: string, postTitle: string) {
+  return JSON.stringify({
+    title: `${commentAuthorName} replied to your post`,
+    body: postTitle.trim() || "Open the post to read the reply.",
+    data: {
+      postId,
+      openUrl: `/blog/${postId}`,
     },
   });
 }
@@ -531,4 +553,161 @@ export async function sendBroadcastNotification(input: BroadcastNotificationInpu
     delivered: deliveredCount,
     failed: failedResults.length,
   };
+}
+
+export async function notifyPostAuthorOfReply(input: PostReplyNotificationInput) {
+  if (!input.vapidConfig.vapidPublicKey || !input.vapidConfig.vapidPrivateKey) {
+    console.warn("[push] skipping post-reply notification because VAPID config is missing", {
+      postId: input.postId,
+      commentId: input.commentId,
+      postAuthorId: input.postAuthorId,
+      commentAuthorId: input.commentAuthorId,
+      hasPublicKey: Boolean(input.vapidConfig.vapidPublicKey),
+      hasPrivateKey: Boolean(input.vapidConfig.vapidPrivateKey),
+      hasSubject: Boolean(input.vapidConfig.vapidSubject),
+    });
+    return;
+  }
+
+  if (input.postAuthorId === input.commentAuthorId) {
+    console.log("[push] skipping post-reply notification for self-reply", {
+      postId: input.postId,
+      commentId: input.commentId,
+      postAuthorId: input.postAuthorId,
+    });
+    return;
+  }
+
+  try {
+    const prisma = getPrismaClient(input.databaseUrl);
+    const postAuthor = await prisma.user.findUnique({
+      where: {
+        id: input.postAuthorId,
+      },
+      select: {
+        notificationsEnabled: true,
+        pushSubscriptions: {
+          select: {
+            id: true,
+            endpoint: true,
+            p256dh: true,
+            auth: true,
+          },
+        },
+      },
+    });
+
+    if (!postAuthor || !postAuthor.notificationsEnabled) {
+      console.log("[push] skipping post-reply notification because author is not eligible", {
+        postId: input.postId,
+        commentId: input.commentId,
+        postAuthorId: input.postAuthorId,
+        authorFound: Boolean(postAuthor),
+        notificationsEnabled: postAuthor?.notificationsEnabled ?? false,
+      });
+      return;
+    }
+
+    if (postAuthor.pushSubscriptions.length === 0) {
+      console.log("[push] skipping post-reply notification because author has no subscriptions", {
+        postId: input.postId,
+        commentId: input.commentId,
+        postAuthorId: input.postAuthorId,
+      });
+      return;
+    }
+
+    console.log("[push] sending post-reply notification", {
+      postId: input.postId,
+      commentId: input.commentId,
+      postAuthorId: input.postAuthorId,
+      subscriptionCount: postAuthor.pushSubscriptions.length,
+    });
+
+    webPush.setVapidDetails(
+      getVapidSubject(input.vapidConfig),
+      input.vapidConfig.vapidPublicKey,
+      input.vapidConfig.vapidPrivateKey
+    );
+
+    const payload = buildPostReplyPayload(
+      input.postId,
+      input.commentAuthorName.trim() || "Someone",
+      input.postTitle
+    );
+    const sendJobs = postAuthor.pushSubscriptions.map((subscription) => {
+      const pushSubscription = {
+        endpoint: subscription.endpoint,
+        keys: {
+          p256dh: subscription.p256dh,
+          auth: subscription.auth,
+        },
+      };
+      return webPush.sendNotification(
+        pushSubscription,
+        payload,
+        getPushDeliveryOptions(`reply-${input.postId}-${input.commentId}`)
+      ).then(() => ({
+        subscriptionId: subscription.id,
+        endpoint: summarizeSubscriptionEndpoint(subscription.endpoint),
+        statusCode: null as number | null,
+        success: true as const,
+      })).catch((error: unknown) => ({
+        subscriptionId: subscription.id,
+        endpoint: summarizeSubscriptionEndpoint(subscription.endpoint),
+        statusCode: getPushStatusCode(error),
+        errorMessage: getPushErrorMessage(error),
+        success: false as const,
+      }));
+    });
+
+    const responses = await Promise.allSettled(sendJobs);
+    const deliveryResults = flattenSettledDeliveryResults(responses);
+    const deliveredCount = deliveryResults.filter((result) => result.success).length;
+    const failedResults = deliveryResults.filter((result) => !result.success);
+
+    console.log("[push] completed post-reply notification delivery", {
+      postId: input.postId,
+      commentId: input.commentId,
+      postAuthorId: input.postAuthorId,
+      attempted: deliveryResults.length,
+      delivered: deliveredCount,
+      failed: failedResults.length,
+      failures: failedResults.map((result) => ({
+        subscriptionId: result.subscriptionId,
+        endpoint: result.endpoint,
+        statusCode: result.statusCode,
+        errorMessage: result.errorMessage,
+      })),
+    });
+
+    const invalidSubscriptionIds = responses.flatMap((response) => {
+      if (response.status === "rejected") {
+        return [];
+      }
+      if (!response.value.success) {
+        return response.value.statusCode === 404 || response.value.statusCode === 410
+          ? [response.value.subscriptionId]
+          : [];
+      }
+      return [];
+    });
+
+    if (invalidSubscriptionIds.length > 0) {
+      console.warn("[push] removing invalid subscriptions after post-reply notification", {
+        postId: input.postId,
+        commentId: input.commentId,
+        invalidSubscriptionIds,
+      });
+      await prisma.userPushSubscription.deleteMany({
+        where: {
+          id: {
+            in: invalidSubscriptionIds,
+          },
+        },
+      });
+    }
+  } catch (error) {
+    console.error("Failed to send push notification for post reply.", error);
+  }
 }
