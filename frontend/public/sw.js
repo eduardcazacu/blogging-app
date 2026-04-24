@@ -7,28 +7,23 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("push", (event) => {
-  if (!event.data) {
-    return;
-  }
-
   let payload = {
-    title: "New post",
+    title: "Eddie's Lounge",
     body: "You have a new notification.",
     data: {
       openUrl: "/",
     },
   };
 
-  try {
-    payload = event.data.json();
-  } catch {
-    payload = {
-      title: "New post",
-      body: event.data.text() || "You have a new notification.",
-      data: {
-        openUrl: "/",
-      },
-    };
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch {
+      payload = {
+        ...payload,
+        body: event.data.text() || payload.body,
+      };
+    }
   }
 
   event.waitUntil(

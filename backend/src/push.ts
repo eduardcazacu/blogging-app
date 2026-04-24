@@ -112,7 +112,7 @@ function getPushStatusCode(error: unknown): number | null {
 }
 
 function getVapidSubject(input: VapidConfig) {
-  return input.vapidSubject?.trim() || "mailto:notifications@eddies-lounge.invalid";
+  return input.vapidSubject?.trim() || "https://lounge.eduardcazacu.com";
 }
 
 function buildPushPayload(postId: number, authorName: string, postTitle: string) {
@@ -160,7 +160,7 @@ function buildPostReplyPayload(postId: number, commentAuthorName: string, postTi
 function getPushDeliveryOptions(topic: string) {
   return {
     TTL: 60 * 60,
-    urgency: "normal" as const,
+    urgency: "high" as const,
     topic,
   };
 }
