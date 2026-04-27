@@ -23,6 +23,7 @@ model User {
   passwordResetTokenHash       String?   @map("password_reset_token_hash")
   passwordResetExpiresAt       DateTime? @map("password_reset_expires_at")
   notificationsEnabled         Boolean   @default(true) @map("notifications_enabled")
+  profilePictureKey            String?   @map("profile_picture_key")
 
   posts      Post[]
   comments   Comment[] @relation("CommentAuthor")

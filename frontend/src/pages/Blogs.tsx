@@ -255,7 +255,7 @@ export const Blogs = () => {
           const themeBackground = getThemePalette(blog.author.themeKey).softBg;
           return (
             <div key={blog.id} data-blog-card="true" data-theme-bg={themeBackground}>
-              <BlogCard 
+              <BlogCard
                id={blog.id}
                authorname ={blog.author.name || "Anonymous"}
                title={blog.title}
@@ -266,7 +266,8 @@ export const Blogs = () => {
                publishedDate={formatPostedTime(blog.createdAt)}
                commentCount={blog.commentCount || 0}
                topComments={blog.topComments || []}
-               themeKey={blog.author.themeKey || undefined} />
+               themeKey={blog.author.themeKey || undefined}
+               authorProfilePictureUrl={blog.author.profilePictureUrl || undefined} />
             </div>
           );
         }) }

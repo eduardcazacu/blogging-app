@@ -541,6 +541,7 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
                 name: true,
                 bio: true,
                 themeKey: true,
+                profilePictureKey: true,
               },
             },
             comments: {
@@ -609,7 +610,8 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
             id: blog.author.id,
             name: blog.author.name,
             bio: blog.author.bio,
-            themeKey: blog.author.themeKey
+            themeKey: blog.author.themeKey,
+            profilePictureUrl: blog.author.profilePictureKey ? buildPublicImageUrl(r2PublicBaseUrl, blog.author.profilePictureKey) : null
           },
           likeCount: blog._count.likes,
           likedByMe: blog.likes.length > 0,
@@ -660,6 +662,7 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
             name: true,
             bio: true,
             themeKey: true,
+            profilePictureKey: true,
           },
         },
         comments: {
@@ -728,7 +731,8 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
                 id: blog.author.id,
                 name: blog.author.name,
                 bio: blog.author.bio,
-                themeKey: blog.author.themeKey
+                themeKey: blog.author.themeKey,
+                profilePictureUrl: blog.author.profilePictureKey ? buildPublicImageUrl(r2PublicBaseUrl, blog.author.profilePictureKey) : null
               },
               likeCount: blog._count.likes,
               likedByMe: blog.likes.length > 0,

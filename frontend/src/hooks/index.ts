@@ -34,6 +34,7 @@ export  interface Blog{
         "name": string | null;
         "bio": string;
         "themeKey"?: string | null;
+        "profilePictureUrl"?: string | null;
     }
 }
 

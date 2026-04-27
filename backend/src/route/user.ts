@@ -30,11 +30,42 @@ type UserRouteEnv = {
 		VAPID_PUBLIC_KEY?: string,
 		VAPID_PRIVATE_KEY?: string,
 		VAPID_SUBJECT?: string,
+		R2_PUBLIC_BASE_URL?: string,
+		BLOG_IMAGES?: {
+			put: (key: string, value: ArrayBuffer, options?: {
+				httpMetadata?: { contentType?: string },
+				customMetadata?: Record<string, string>
+			}) => Promise<unknown>,
+			head: (key: string) => Promise<unknown | null>,
+			delete: (key: string) => Promise<unknown>
+		}
 	},
 	Variables: {
 		userId: number
 	},
 };
+
+const PROFILE_PICTURE_MAX_BYTES = 3 * 1024 * 1024;
+const PROFILE_PICTURE_ALLOWED_MIME = new Set([
+	"image/jpeg",
+	"image/png",
+	"image/webp",
+	"image/gif",
+]);
+const PROFILE_PICTURE_EXTENSION_BY_MIME: Record<string, string> = {
+	"image/jpeg": "jpg",
+	"image/png": "png",
+	"image/webp": "webp",
+	"image/gif": "gif",
+};
+
+function buildPublicImageUrl(baseUrl: string | undefined, key: string | null) {
+	if (!baseUrl || !key) {
+		return null;
+	}
+	const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+	return `${normalizedBase}/${key}`;
+}
 
 export const userRouter = new Hono<UserRouteEnv>();
 
@@ -914,7 +945,7 @@ userRouter.post("/me/push/test", async (c) => {
 
 userRouter.get("/me", async (c) => {
 	try {
-		const { databaseUrl } = getConfig(c);
+		const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
 		const prisma = getPrismaClient(databaseUrl);
 		const userId = c.get("userId");
 		const user = await prisma.user.findUnique({
@@ -928,6 +959,7 @@ userRouter.get("/me", async (c) => {
 				bio: true,
 				themeKey: true,
 				notificationsEnabled: true,
+				profilePictureKey: true,
 			}
 		});
 		if (!user) {
@@ -935,7 +967,8 @@ userRouter.get("/me", async (c) => {
 			return c.json({ msg: "User not found" });
 		}
 		const isAdmin = isAdminEmail(user.email, getAdminEmails(c));
-		return c.json({ user: { ...user, isAdmin } });
+		const profilePictureUrl = buildPublicImageUrl(r2PublicBaseUrl, user.profilePictureKey);
+		return c.json({ user: { ...user, isAdmin, profilePictureUrl } });
 	} catch (e) {
 		console.error(e);
 		c.status(500);
@@ -943,9 +976,111 @@ userRouter.get("/me", async (c) => {
 	}
 });
 
-userRouter.put("/me", async (c) => {
+userRouter.post("/me/profile-picture", async (c) => {
+	const bucket = c.env?.BLOG_IMAGES;
+	if (!bucket) {
+		c.status(500);
+		return c.json({ msg: "BLOG_IMAGES R2 binding is not configured." });
+	}
+
+	try {
+		const formData = await c.req.formData();
+		const fileInput = formData.get("image");
+		if (!(fileInput instanceof File)) {
+			c.status(400);
+			return c.json({ msg: "Image file is required." });
+		}
+		if (!PROFILE_PICTURE_ALLOWED_MIME.has(fileInput.type)) {
+			c.status(400);
+			return c.json({ msg: "Only JPG, PNG, WEBP, or GIF images are allowed." });
+		}
+		if (fileInput.size <= 0 || fileInput.size > PROFILE_PICTURE_MAX_BYTES) {
+			c.status(400);
+			return c.json({ msg: "Image must be between 1B and 3MB." });
+		}
+
+		const userId = c.get("userId");
+		const extension = PROFILE_PICTURE_EXTENSION_BY_MIME[fileInput.type] ?? "bin";
+		const key = `profile-pictures/${userId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+		const bytes = await fileInput.arrayBuffer();
+
+		await bucket.put(key, bytes, {
+			httpMetadata: { contentType: fileInput.type },
+			customMetadata: { userId: String(userId) },
+		});
+
+		const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const previous = await prisma.user.findUnique({
+			where: { id: userId },
+			select: { profilePictureKey: true },
+		});
+		await prisma.user.update({
+			where: { id: userId },
+			data: { profilePictureKey: key },
+		});
+
+		if (previous?.profilePictureKey && previous.profilePictureKey !== key) {
+			c.executionCtx.waitUntil(
+				Promise.resolve(bucket.delete(previous.profilePictureKey)).catch((err) => {
+					console.error("Failed to delete previous profile picture", err);
+				})
+			);
+		}
+
+		return c.json({
+			key,
+			profilePictureUrl: buildPublicImageUrl(r2PublicBaseUrl, key),
+		});
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to upload profile picture." });
+	}
+});
+
+userRouter.post("/me/profile-picture/delete", async (c) => {
 	try {
 		const { databaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const userId = c.get("userId");
+		const existing = await prisma.user.findUnique({
+			where: { id: userId },
+			select: { profilePictureKey: true },
+		});
+		if (!existing) {
+			c.status(404);
+			return c.json({ msg: "User not found" });
+		}
+		if (!existing.profilePictureKey) {
+			return c.json({ msg: "No profile picture to delete." });
+		}
+
+		await prisma.user.update({
+			where: { id: userId },
+			data: { profilePictureKey: null },
+		});
+
+		const bucket = c.env?.BLOG_IMAGES;
+		if (bucket) {
+			c.executionCtx.waitUntil(
+				Promise.resolve(bucket.delete(existing.profilePictureKey)).catch((err) => {
+					console.error("Failed to delete profile picture from bucket", err);
+				})
+			);
+		}
+
+		return c.json({ msg: "Profile picture removed." });
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to delete profile picture." });
+	}
+});
+
+userRouter.put("/me", async (c) => {
+	try {
+		const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
 		const prisma = getPrismaClient(databaseUrl);
 		const body = await c.req.json();
 		const bio = typeof body?.bio === "string" ? body.bio.trim() : "";
@@ -973,10 +1108,12 @@ userRouter.put("/me", async (c) => {
 					id: true,
 					name: true,
 					bio: true,
-					themeKey: true
+					themeKey: true,
+					profilePictureKey: true,
 				}
 			});
-			return c.json({ user });
+			const profilePictureUrl = buildPublicImageUrl(r2PublicBaseUrl, user.profilePictureKey);
+			return c.json({ user: { ...user, profilePictureUrl } });
 		} catch (e) {
 			if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
 				c.status(404);

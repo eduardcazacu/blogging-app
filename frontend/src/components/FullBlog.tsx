@@ -261,7 +261,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
               <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
                 <div className="flex min-w-0 items-start gap-2 sm:gap-3">
                   <div className="shrink-0 flex flex-col justify-start pt-1">
-                      <Avatar size={"small"} name={blog.author.name || "Anonymous"} themeKey={blog.author.themeKey} />
+                      <Avatar size={"small"} name={blog.author.name || "Anonymous"} themeKey={blog.author.themeKey} imageUrl={blog.author.profilePictureUrl} />
                   </div>
                   <div className="text-xl font-extrabold leading-tight break-words sm:text-3xl">
                     {postEditing ? (

@@ -19,7 +19,106 @@ type Profile = {
   themeKey?: string | null;
   notificationsEnabled: boolean;
   isAdmin: boolean;
+  profilePictureUrl?: string | null;
 };
+
+const PROFILE_PICTURE_MAX_WIDTH = 512;
+const PROFILE_PICTURE_MAX_HEIGHT = 512;
+const PROFILE_PICTURE_TARGET_BYTES = 400_000;
+const PROFILE_PICTURE_MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+
+async function loadImageDimensions(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    return await new Promise<{ width: number; height: number }>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => reject(new Error("Failed to read image dimensions."));
+      image.src = objectUrl;
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function resizeProfilePicture(file: File) {
+  if (file.type === "image/gif") {
+    const { width, height } = await loadImageDimensions(file);
+    if (width > 1024 || height > 1024) {
+      throw new Error("GIF is larger than 1024x1024. Please upload a smaller GIF.");
+    }
+    return file;
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Unable to load image."));
+      img.src = objectUrl;
+    });
+
+    const baseScale = Math.min(
+      1,
+      PROFILE_PICTURE_MAX_WIDTH / image.naturalWidth,
+      PROFILE_PICTURE_MAX_HEIGHT / image.naturalHeight
+    );
+    let workingWidth = Math.max(1, Math.round(image.naturalWidth * baseScale));
+    let workingHeight = Math.max(1, Math.round(image.naturalHeight * baseScale));
+    let bestBlob: Blob | null = null;
+    const qualityLevels = [0.92, 0.85, 0.78, 0.7];
+
+    for (let pass = 0; pass < 4; pass++) {
+      const canvas = document.createElement("canvas");
+      canvas.width = workingWidth;
+      canvas.height = workingHeight;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Canvas is unavailable in this browser.");
+      }
+      context.drawImage(image, 0, 0, workingWidth, workingHeight);
+
+      for (const quality of qualityLevels) {
+        const candidate = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob(resolve, "image/webp", quality);
+        });
+        if (!candidate) {
+          continue;
+        }
+        bestBlob = candidate;
+        if (candidate.size <= PROFILE_PICTURE_TARGET_BYTES) {
+          break;
+        }
+      }
+
+      if (bestBlob && bestBlob.size <= PROFILE_PICTURE_TARGET_BYTES) {
+        break;
+      }
+
+      workingWidth = Math.max(160, Math.round(workingWidth * 0.85));
+      workingHeight = Math.max(160, Math.round(workingHeight * 0.85));
+    }
+
+    if (!bestBlob) {
+      throw new Error("Failed to process image.");
+    }
+
+    const outputName = file.name.replace(/\.[^.]+$/, ".webp");
+    return new File([bestBlob], outputName, { type: "image/webp" });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function persistProfilePicture(url: string | null) {
+  if (url) {
+    localStorage.setItem("profilePictureUrl", url);
+  } else {
+    localStorage.removeItem("profilePictureUrl");
+  }
+  window.dispatchEvent(new Event("profile-picture-changed"));
+}
 
 function base64ToUint8Array(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -46,6 +145,10 @@ export const Account = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
+  const [uploadingProfilePicture, setUploadingProfilePicture] = useState(false);
+  const [deletingProfilePicture, setDeletingProfilePicture] = useState(false);
+  const [profilePictureError, setProfilePictureError] = useState<string | null>(null);
 
   const remainingChars = useMemo(() => BIO_MAX_LENGTH - bio.length, [bio.length]);
 
@@ -83,6 +186,7 @@ export const Account = () => {
         setProfile(user);
         setBio(user?.bio ?? "");
         setNotificationsEnabled(Boolean(user?.notificationsEnabled));
+        setProfilePictureUrl(user?.profilePictureUrl ?? null);
         const selectedTheme = THEME_PALETTES.find((theme) => theme.key === user?.themeKey)?.key ?? DEFAULT_THEME_KEY;
         setThemeKey(selectedTheme);
         localStorage.setItem("userEmail", user.email.toLowerCase());
@@ -91,6 +195,7 @@ export const Account = () => {
         if (user.name?.trim()) {
           localStorage.setItem("displayName", user.name.trim());
         }
+        persistProfilePicture(user?.profilePictureUrl ?? null);
       } catch (e) {
         if (axios.isAxiosError(e)) {
           if (isAuthErrorStatus(e.response?.status)) {
@@ -123,6 +228,83 @@ export const Account = () => {
     window.addEventListener("push-subscription-changed", handler);
     return () => window.removeEventListener("push-subscription-changed", handler);
   }, []);
+
+  async function uploadProfilePicture(file: File) {
+    if (!file.type.startsWith("image/")) {
+      setProfilePictureError("Please choose an image file.");
+      return;
+    }
+    setProfilePictureError(null);
+    setUploadingProfilePicture(true);
+    try {
+      const optimized = await resizeProfilePicture(file);
+      if (optimized.size > PROFILE_PICTURE_MAX_UPLOAD_BYTES) {
+        throw new Error("Image is still too large after optimization (max 3MB).");
+      }
+      const formData = new FormData();
+      formData.append("image", optimized);
+      const response = await axios.post(
+        `${BACKEND_URL}/api/v1/user/me/profile-picture`,
+        formData,
+        {
+          headers: {
+            Authorization: getAuthHeader(),
+          },
+        }
+      );
+      const nextUrl = (response.data?.profilePictureUrl as string | null) ?? null;
+      setProfilePictureUrl(nextUrl);
+      persistProfilePicture(nextUrl);
+      setSuccess("Profile picture updated.");
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        if (isAuthErrorStatus(e.response?.status)) {
+          clearAuthStorage();
+          setAuthExpired(true);
+          return;
+        }
+        setProfilePictureError(e.response?.data?.msg || "Failed to upload profile picture.");
+      } else if (e instanceof Error) {
+        setProfilePictureError(e.message);
+      } else {
+        setProfilePictureError("Failed to upload profile picture.");
+      }
+    } finally {
+      setUploadingProfilePicture(false);
+    }
+  }
+
+  async function deleteProfilePicture() {
+    setProfilePictureError(null);
+    setDeletingProfilePicture(true);
+    try {
+      await axios.post(
+        `${BACKEND_URL}/api/v1/user/me/profile-picture/delete`,
+        {},
+        {
+          headers: {
+            Authorization: getAuthHeader(),
+          },
+        }
+      );
+      setProfilePictureUrl(null);
+      persistProfilePicture(null);
+      setSuccess("Profile picture removed.");
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        if (isAuthErrorStatus(e.response?.status)) {
+          clearAuthStorage();
+          setAuthExpired(true);
+          return;
+        }
+        setProfilePictureError(e.response?.data?.msg || "Failed to delete profile picture.");
+      } else {
+        setProfilePictureError("Failed to delete profile picture.");
+      }
+    } finally {
+      setDeletingProfilePicture(false);
+    }
+  }
 
   async function saveBio() {
     setSaving(true);
@@ -311,11 +493,48 @@ export const Account = () => {
               <>
                 <div className="pt-4 text-slate-700">
                   <div className="flex items-center gap-3">
-                    <Avatar size="big" name={profile?.name || "User"} themeKey={themeKey} />
+                    <Avatar size="big" name={profile?.name || "User"} themeKey={themeKey} imageUrl={profilePictureUrl} />
                     <div>
                       <div className="font-medium">{profile?.name || "User"}</div>
                       <div className="text-sm text-slate-500">{profile?.email || ""}</div>
                     </div>
+                  </div>
+                  <div className="mt-4 rounded-lg border border-slate-200 p-3 sm:p-4">
+                    <div className="text-sm font-medium text-slate-800">Profile picture</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      JPG, PNG, WEBP, or GIF. Resized to 512x512 and compressed before upload.
+                    </div>
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        disabled={uploadingProfilePicture || deletingProfilePicture}
+                        className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white disabled:opacity-60"
+                        onChange={(e) => {
+                          const selected = e.target.files?.[0];
+                          if (selected) {
+                            void uploadProfilePicture(selected);
+                          }
+                          e.target.value = "";
+                        }}
+                      />
+                      {profilePictureUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => void deleteProfilePicture()}
+                          disabled={uploadingProfilePicture || deletingProfilePicture}
+                          className="rounded-full bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {deletingProfilePicture ? "Removing..." : "Remove picture"}
+                        </button>
+                      ) : null}
+                    </div>
+                    {uploadingProfilePicture ? (
+                      <div className="mt-2 text-sm text-slate-600">Uploading picture...</div>
+                    ) : null}
+                    {profilePictureError ? (
+                      <div className="mt-2 text-sm text-red-600">{profilePictureError}</div>
+                    ) : null}
                   </div>
                 </div>
 

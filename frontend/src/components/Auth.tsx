@@ -61,7 +61,7 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
           Authorization: getAuthHeader(),
         },
       });
-      const profile = me.data?.user as { name?: string | null; email?: string; isAdmin?: boolean; themeKey?: string | null };
+      const profile = me.data?.user as { name?: string | null; email?: string; isAdmin?: boolean; themeKey?: string | null; profilePictureUrl?: string | null };
       const displayName =
         (profile?.name && profile.name.trim()) ||
         profile?.email?.trim() ||
@@ -74,6 +74,12 @@ export const Auth = ({type}: {type: "signup" | "signin"}) => {
       } else {
         localStorage.removeItem("themeKey");
       }
+      if (profile?.profilePictureUrl) {
+        localStorage.setItem("profilePictureUrl", profile.profilePictureUrl);
+      } else {
+        localStorage.removeItem("profilePictureUrl");
+      }
+      window.dispatchEvent(new Event("profile-picture-changed"));
       navigate("/blogs")
     } catch (e: unknown){
       if (axios.isAxiosError(e)) {

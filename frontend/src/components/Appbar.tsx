@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Avatar } from "./BlogCard";
 import { DEFAULT_THEME_KEY, THEME_PALETTES } from "../themes";
@@ -11,6 +12,21 @@ export const Appbar = () => {
   const storedThemeKey = localStorage.getItem("themeKey");
   const currentTheme = THEME_PALETTES.find((theme) => theme.key === storedThemeKey) ?? THEME_PALETTES.find((theme) => theme.key === DEFAULT_THEME_KEY)!;
   const avatarThemeKey = currentTheme.key;
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(
+    () => localStorage.getItem("profilePictureUrl")
+  );
+
+  useEffect(() => {
+    const handler = () => {
+      setProfilePictureUrl(localStorage.getItem("profilePictureUrl"));
+    };
+    window.addEventListener("profile-picture-changed", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("profile-picture-changed", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
 
   const triggerFeedRefresh = () => {
     const state = { refreshFeedAt: Date.now() };
@@ -50,7 +66,7 @@ export const Appbar = () => {
           </button>
         </Link>
         <Link to={"/account"} className="cursor-pointer" aria-label="Account">
-          <Avatar size={"big"} name={displayName} themeKey={avatarThemeKey} />
+          <Avatar size={"big"} name={displayName} themeKey={avatarThemeKey} imageUrl={profilePictureUrl} />
         </Link>
       </div>
       

@@ -22,6 +22,7 @@ interface BlogCardProps{
     topComments?: Comment[];
     commentCount?: number;
     themeKey?: string | null;
+    authorProfilePictureUrl?: string | null;
 }
 
 export const BlogCard = ({
@@ -35,7 +36,8 @@ export const BlogCard = ({
     likedByMe = false,
     topComments = [],
     commentCount = 0,
-    themeKey
+    themeKey,
+    authorProfilePictureUrl
 }: BlogCardProps) => {
   const [postLikeCount, setPostLikeCount] = useState(likeCount);
   const [postLikedByMe, setPostLikedByMe] = useState(likedByMe);
@@ -156,7 +158,7 @@ export const BlogCard = ({
   >
         <div className="flex">
             <div className="">
-            <Avatar size={"small"} name={authorname} themeKey={themeKey}/> 
+            <Avatar size={"small"} name={authorname} themeKey={themeKey} imageUrl={authorProfilePictureUrl}/>
             </div>
            <div className="font-extralight pl-2 text-sm flex justify-center flex-col">
            {authorname}
@@ -296,16 +298,28 @@ export function Circle(){
     </div>
 }
 
-export function Avatar({ name, size= "small", themeKey }: { name: string, size: "small" | "big", themeKey?: string | null }){
+export function Avatar({ name, size = "small", themeKey, imageUrl }: { name: string, size: "small" | "big", themeKey?: string | null, imageUrl?: string | null }){
     const initial = name?.trim()?.[0]?.toUpperCase() || "?";
     const theme = getThemePalette(themeKey);
-    return <div className={`relative inline-flex items-center justify-center 
-    overflow-hidden rounded-full border ${size === "small" ? "w-6 h-6": "w-10 h-10"}`}
+    const sizeClass = size === "small" ? "w-6 h-6" : "w-10 h-10";
+    const transformedImageUrl = imageUrl
+        ? getTransformedImageUrl(imageUrl, { width: size === "small" ? 96 : 160, fit: "cover", quality: 85 })
+        : null;
+    return <div className={`relative inline-flex items-center justify-center
+    overflow-hidden rounded-full border ${sizeClass}`}
     style={{ backgroundColor: theme.softBg, borderColor: theme.border }}>
-        
-        <span className={`${size === "small" ? "text-xs" : "text-md"} font-small`} style={{ color: theme.text }}>
-            {initial}
-        </span>
+        {transformedImageUrl ? (
+            <img
+                src={transformedImageUrl}
+                alt={name || "Profile picture"}
+                loading="lazy"
+                className="h-full w-full object-cover"
+            />
+        ) : (
+            <span className={`${size === "small" ? "text-xs" : "text-md"} font-small`} style={{ color: theme.text }}>
+                {initial}
+            </span>
+        )}
     </div>
-    
+
 }
