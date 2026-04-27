@@ -1,3 +1,26 @@
+import { marked } from "marked";
+
+type BroadcastEmailRecipient = {
+  email: string;
+  name?: string | null;
+};
+
+type BroadcastEmailInput = {
+  apiKey: string;
+  from: string;
+  appName: string;
+  subject: string;
+  markdownBody: string;
+  recipients: BroadcastEmailRecipient[];
+};
+
+type BroadcastEmailResult = {
+  attempted: number;
+  delivered: number;
+  failed: number;
+  failures: { email: string; error: string }[];
+};
+
 type VerificationEmailInput = {
   apiKey: string;
   from: string;
@@ -239,4 +262,91 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function renderMarkdownToEmailHtml(markdownBody: string, appName: string) {
+  const renderedBody = marked.parse(markdownBody, {
+    async: false,
+    gfm: true,
+    breaks: true,
+  }) as string;
+
+  return `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827; max-width: 640px; margin: 0 auto; padding: 16px;">
+      <div class="markdown-body" style="font-size: 16px;">
+        ${renderedBody}
+      </div>
+      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0 16px;" />
+      <p style="color: #6b7280; font-size: 12px;">You're receiving this email because you have an account with ${escapeHtml(appName)}.</p>
+    </div>
+  `;
+}
+
+export async function sendBroadcastEmail(input: BroadcastEmailInput): Promise<BroadcastEmailResult> {
+  if (input.recipients.length === 0) {
+    throw new Error("No recipients available for broadcast email.");
+  }
+
+  const html = renderMarkdownToEmailHtml(input.markdownBody, input.appName);
+  const text = input.markdownBody;
+  const subject = input.subject.trim();
+
+  const sendJobs = input.recipients.map(async (recipient) => {
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${input.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: input.from,
+          to: [recipient.email],
+          subject,
+          html,
+          text,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        return {
+          email: recipient.email,
+          success: false as const,
+          error: `Resend API error (${response.status}): ${errorBody}`,
+        };
+      }
+      return { email: recipient.email, success: true as const };
+    } catch (error) {
+      return {
+        email: recipient.email,
+        success: false as const,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  const settled = await Promise.allSettled(sendJobs);
+  const results = settled.map((entry, index) => {
+    if (entry.status === "fulfilled") {
+      return entry.value;
+    }
+    return {
+      email: input.recipients[index].email,
+      success: false as const,
+      error: entry.reason instanceof Error ? entry.reason.message : String(entry.reason),
+    };
+  });
+
+  const delivered = results.filter((result) => result.success).length;
+  const failures = results.flatMap((result) =>
+    result.success ? [] : [{ email: result.email, error: result.error }]
+  );
+
+  return {
+    attempted: results.length,
+    delivered,
+    failed: failures.length,
+    failures,
+  };
 }

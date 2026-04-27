@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { getConfig } from "../env";
 import { getAdminEmails, isAdminEmail } from "../admin-config";
 import { getPrismaClient } from "../prisma";
-import { sendWelcomeEmail } from "../email";
+import { sendBroadcastEmail, sendWelcomeEmail } from "../email";
 import { sendBroadcastNotification } from "../push";
 import z from "zod";
 
@@ -31,6 +31,11 @@ export const adminRouter = new Hono<AdminEnv>();
 const broadcastNotificationInput = z.object({
   title: z.string().trim().min(1).max(120),
   body: z.string().trim().min(1).max(500),
+});
+
+const broadcastEmailInput = z.object({
+  subject: z.string().trim().min(1).max(200),
+  body: z.string().trim().min(1).max(20000),
 });
 
 adminRouter.use("/*", async (c, next) => {
@@ -224,6 +229,102 @@ adminRouter.put("/reject/:id", async (c) => {
     console.error(e);
     c.status(500);
     return c.json({ msg: "Failed to reject user" });
+  }
+});
+
+adminRouter.get("/email/recipients", async (c) => {
+  try {
+    const { databaseUrl } = getConfig(c);
+    const prisma = getPrismaClient(databaseUrl);
+    const recipients = await prisma.user.findMany({
+      where: { status: "approved" },
+      orderBy: { email: "asc" },
+      select: { id: true, email: true, name: true },
+    });
+
+    return c.json({ recipients });
+  } catch (e) {
+    console.error(e);
+    c.status(500);
+    return c.json({ msg: "Failed to load email recipients" });
+  }
+});
+
+adminRouter.post("/email/broadcast", async (c) => {
+  try {
+    const body = await c.req.json();
+    const parsed = broadcastEmailInput.safeParse(body);
+    if (!parsed.success) {
+      c.status(400);
+      return c.json({
+        msg: "Invalid broadcast email payload",
+        errors: parsed.error.flatten(),
+      });
+    }
+
+    const resendApiKey = c.env?.RESEND_API_KEY ?? process.env.RESEND_API_KEY;
+    const emailFrom = c.env?.EMAIL_FROM ?? process.env.EMAIL_FROM;
+    if (!resendApiKey || !emailFrom) {
+      c.status(400);
+      return c.json({
+        msg: "Email broadcast is not configured (missing RESEND_API_KEY or EMAIL_FROM).",
+      });
+    }
+
+    const { databaseUrl } = getConfig(c);
+    const prisma = getPrismaClient(databaseUrl);
+    const recipients = await prisma.user.findMany({
+      where: { status: "approved" },
+      select: { email: true, name: true },
+    });
+
+    if (recipients.length === 0) {
+      c.status(400);
+      return c.json({ msg: "No approved users available for broadcast." });
+    }
+
+    const result = await sendBroadcastEmail({
+      apiKey: resendApiKey,
+      from: emailFrom,
+      appName: "Eddie's Lounge",
+      subject: parsed.data.subject,
+      markdownBody: parsed.data.body,
+      recipients,
+    });
+
+    if (result.delivered === 0) {
+      console.error("[admin] email broadcast failed for all recipients", {
+        attempted: result.attempted,
+        failures: result.failures,
+      });
+      c.status(502);
+      return c.json({
+        msg: "Email broadcast failed for all recipients.",
+        result: { attempted: result.attempted, delivered: 0, failed: result.failed },
+      });
+    }
+
+    if (result.failed > 0) {
+      console.warn("[admin] email broadcast had partial failures", {
+        attempted: result.attempted,
+        delivered: result.delivered,
+        failed: result.failed,
+        failures: result.failures,
+      });
+    }
+
+    return c.json({
+      msg: `Email sent to ${result.delivered} of ${result.attempted} user${result.attempted === 1 ? "" : "s"}.`,
+      result: {
+        attempted: result.attempted,
+        delivered: result.delivered,
+        failed: result.failed,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    c.status(500);
+    return c.json({ msg: "Failed to send broadcast email." });
   }
 });
 
