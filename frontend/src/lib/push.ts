@@ -1,8 +1,7 @@
 import axios from "axios";
 import { BACKEND_URL } from "../config";
 
-const PUSH_PERMISSION_PROMPT_VERSION = "2026-03-20-notifications-v2";
-const PUSH_PERMISSION_PROMPT_KEY = "push.permissionPromptVersion";
+const PUSH_PROMPT_SUPPRESSED_KEY = "push.promptSuppressed";
 
 function base64ToUint8Array(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -35,7 +34,7 @@ async function getPushPublicKey(authHeader: string) {
   return publicKey;
 }
 
-async function subscribePushDevice(authHeader: string) {
+export async function subscribePushDevice(authHeader: string) {
   const publicKey = await getPushPublicKey(authHeader);
   const registration = await navigator.serviceWorker.ready;
   let subscription = await registration.pushManager.getSubscription();
@@ -72,52 +71,37 @@ async function subscribePushDevice(authHeader: string) {
       },
     }
   );
+
+  await axios.put(
+    `${BACKEND_URL}/api/v1/user/me/notifications`,
+    { notificationsEnabled: true },
+    { headers: { Authorization: authHeader } }
+  );
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("push-subscription-changed"));
+  }
 }
 
-function hasPromptedForCurrentVersion() {
+export function isPushPromptSuppressed() {
   return (
     typeof localStorage !== "undefined" &&
-    localStorage.getItem(PUSH_PERMISSION_PROMPT_KEY) === PUSH_PERMISSION_PROMPT_VERSION
+    localStorage.getItem(PUSH_PROMPT_SUPPRESSED_KEY) === "1"
   );
 }
 
-function markPromptedForCurrentVersion() {
+export function suppressPushPrompt() {
   if (typeof localStorage !== "undefined") {
-    localStorage.setItem(PUSH_PERMISSION_PROMPT_KEY, PUSH_PERMISSION_PROMPT_VERSION);
+    localStorage.setItem(PUSH_PROMPT_SUPPRESSED_KEY, "1");
   }
 }
 
-export function shouldPromptForNotificationPermission() {
-  return isPushNotificationSupported() && Notification.permission === "default" && !hasPromptedForCurrentVersion();
-}
-
-export function markNotificationPermissionPromptAsHandled() {
-  markPromptedForCurrentVersion();
-}
-
-export async function promptForNotificationPermissionOnFirstOpenAfterUpdate(authHeader: string) {
-  if (!isPushNotificationSupported()) {
-    return;
-  }
-  if (Notification.permission !== "default" || hasPromptedForCurrentVersion()) {
-    return;
-  }
-
-  try {
-    const permission = await Notification.requestPermission();
-    if (permission !== "default") {
-      markPromptedForCurrentVersion();
-    }
-    if (permission !== "granted") {
-      return;
-    }
-
-    await subscribePushDevice(authHeader);
-  } catch (error) {
-    // Some browsers (notably Safari) may block permission prompts unless called from a user gesture.
-    // In that case, skip marking this as handled so we can try again on next app open.
-    throw error;
-  }
+export function shouldShowPushPrompt() {
+  return (
+    isPushNotificationSupported() &&
+    Notification.permission === "default" &&
+    !isPushPromptSuppressed()
+  );
 }
 
 export async function enablePushIfPermissionGranted(authHeader: string) {

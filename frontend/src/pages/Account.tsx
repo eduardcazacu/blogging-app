@@ -115,6 +115,15 @@ export const Account = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handler = () => {
+      setNotificationsEnabled(true);
+      void refreshPushState();
+    };
+    window.addEventListener("push-subscription-changed", handler);
+    return () => window.removeEventListener("push-subscription-changed", handler);
+  }, []);
+
   async function saveBio() {
     setSaving(true);
     setError(null);

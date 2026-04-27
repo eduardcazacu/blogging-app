@@ -11,6 +11,8 @@ import { VerifyEmail } from './pages/VerifyEmail'
 import { ForgotPassword } from './pages/ForgotPassword'
 import { ResetPassword } from './pages/ResetPassword'
 import { getAuthHeader, refreshAccessToken } from './lib/auth'
+import { enablePushIfPermissionGranted } from './lib/push'
+import { NotificationPrompt } from './components/NotificationPrompt'
 
 function RootRedirect() {
   const [targetPath, setTargetPath] = useState<string | null>(null);
@@ -48,7 +50,21 @@ function RootRedirect() {
 
 function App() {
   useEffect(() => {
-    void refreshAccessToken();
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      await refreshAccessToken();
+      if (cancelled) return;
+      const authHeader = getAuthHeader();
+      if (!authHeader) return;
+      try {
+        await enablePushIfPermissionGranted(authHeader);
+      } catch {
+        // Silent re-sync only; user can re-enable from the banner or Account page.
+      }
+    };
+
+    void bootstrap();
 
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -57,7 +73,10 @@ function App() {
     };
 
     window.addEventListener("visibilitychange", onVisibilityChange);
-    return () => window.removeEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, []);
 
   return (
@@ -76,6 +95,7 @@ function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
         </Routes>
+        <NotificationPrompt />
       </BrowserRouter>
     </>
   )
