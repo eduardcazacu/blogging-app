@@ -129,6 +129,7 @@ const profileAuthMiddleware = async (c: Context<UserRouteEnv>, next: Next) => {
 
 userRouter.use("/me", profileAuthMiddleware);
 userRouter.use("/me/*", profileAuthMiddleware);
+userRouter.use("/list", profileAuthMiddleware);
 
 const verifyEmailInput = z.object({
 	email: z.string().email(),
@@ -940,6 +941,67 @@ userRouter.post("/me/push/test", async (c) => {
 		console.error(e);
 		c.status(500);
 		return c.json({ msg: "Failed to send test notification." });
+	}
+});
+
+userRouter.get("/list", async (c) => {
+	try {
+		const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
+		const prisma = getPrismaClient(databaseUrl);
+		const [recentPosters, allUsers] = await Promise.all([
+			prisma.post.groupBy({
+				by: ["authorId"],
+				_max: { createdAt: true },
+				orderBy: { _max: { createdAt: "desc" } },
+				take: 200,
+			}),
+			prisma.user.findMany({
+				where: {
+					status: "approved",
+					emailVerifiedAt: { not: null },
+				},
+				orderBy: [
+					{ name: "asc" },
+					{ id: "asc" },
+				],
+				take: 200,
+				select: {
+					id: true,
+					name: true,
+					themeKey: true,
+					profilePictureKey: true,
+				},
+			}),
+		]);
+
+		const usersById = new Map(allUsers.map((user) => [user.id, user]));
+		const ordered: typeof allUsers = [];
+		const seen = new Set<number>();
+		for (const poster of recentPosters) {
+			const user = usersById.get(poster.authorId);
+			if (user) {
+				ordered.push(user);
+				seen.add(user.id);
+			}
+		}
+		for (const user of allUsers) {
+			if (!seen.has(user.id)) {
+				ordered.push(user);
+			}
+		}
+
+		return c.json({
+			users: ordered.map((user) => ({
+				id: user.id,
+				name: user.name,
+				themeKey: user.themeKey,
+				profilePictureUrl: buildPublicImageUrl(r2PublicBaseUrl, user.profilePictureKey),
+			})),
+		});
+	} catch (e) {
+		console.error(e);
+		c.status(500);
+		return c.json({ msg: "Failed to load users." });
 	}
 });
 

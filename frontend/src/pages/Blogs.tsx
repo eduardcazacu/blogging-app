@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Appbar } from "../components/Appbar"
 import { BlogCard } from "../components/BlogCard"
 import { BlogSkeleton } from "../components/BlogSkeleton";
-import { useBlogs } from "../hooks"
+import { UsersStrip } from "../components/UsersStrip";
+import { useBlogs, useUsers } from "../hooks"
 import { formatPostedTime } from "../lib/datetime";
 import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { getThemePalette } from "../themes";
@@ -75,17 +76,44 @@ function blendWeightedColors(samples: Array<{ color: string; weight: number }>) 
   return `rgb(${Math.round(r / totalWeight)}, ${Math.round(g / totalWeight)}, ${Math.round(b / totalWeight)})`;
 }
 
+const EMPTY_AUTHOR_MESSAGES = [
+  "🦗 Crickets... {name} hasn't posted anything yet.",
+  "{name}'s shelf is empty — just dust bunnies and tumbleweeds.",
+  "{name} is keeping their thoughts close to the chest. For now.",
+];
+
 export const Blogs = () => {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const lastResolvedBgRef = useRef(BASE_BG_COLOR);
   const lastRefreshSignalRef = useRef<number | null>(null);
   const [activeBgColor, setActiveBgColor] = useState(BASE_BG_COLOR);
+  const [selectedAuthorId, setSelectedAuthorId] = useState<number | null>(null);
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const pagesParam = Number(searchParams.get("pages") || "1");
   const initialPages = Number.isFinite(pagesParam) ? Math.max(1, Math.min(10, pagesParam)) : 1;
 
-  const {loading, loadingMore, blogs, authExpired, hasMore, loadedPages, fetchNextPage, refreshBlogs} = useBlogs(initialPages);
+  const {loading, loadingMore, blogs, authExpired, hasMore, loadedPages, fetchNextPage, refreshBlogs} = useBlogs(initialPages, selectedAuthorId);
+  const { users, loading: loadingUsers, authExpired: usersAuthExpired } = useUsers();
+
+  const selectedUser = useMemo(
+    () => (selectedAuthorId == null ? null : users.find((u) => u.id === selectedAuthorId) ?? null),
+    [users, selectedAuthorId]
+  );
+  const emptyAuthorMessage = useMemo(() => {
+    if (selectedAuthorId == null) return null;
+    const name = selectedUser?.name?.trim() || "This account";
+    const template = EMPTY_AUTHOR_MESSAGES[selectedAuthorId % EMPTY_AUTHOR_MESSAGES.length];
+    return template.replace("{name}", name);
+  }, [selectedAuthorId, selectedUser]);
+
+  const handleSelectAuthor = (authorId: number | null) => {
+    if (authorId === selectedAuthorId) return;
+    setSelectedAuthorId(authorId);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
 
     useEffect(() => {
       if (!hasMore) {
@@ -124,8 +152,12 @@ export const Blogs = () => {
         return;
       }
       lastRefreshSignalRef.current = signal;
-      refreshBlogs();
-    }, [location.state, refreshBlogs]);
+      if (selectedAuthorId !== null) {
+        setSelectedAuthorId(null);
+      } else {
+        refreshBlogs();
+      }
+    }, [location.state, refreshBlogs, selectedAuthorId]);
 
     useEffect(() => {
       const current = Number(searchParams.get("pages") || "1");
@@ -217,29 +249,9 @@ export const Blogs = () => {
       };
     }, [blogs]);
 
-    if (authExpired) {
+    if (authExpired || usersAuthExpired) {
       return <Navigate to="/signin" replace />;
     }
-
-    if (loading){
-      return <div className="min-h-screen bg-slate-100">
-        <Appbar/>
-        <div className="flex justify-center px-4 py-6 sm:px-6 sm:py-8">
-          <div className="w-full max-w-screen-md space-y-4">
-          <BlogSkeleton />
-          <BlogSkeleton />
-          <BlogSkeleton />
-          <BlogSkeleton />
-          <BlogSkeleton />
-          <BlogSkeleton />
-          <BlogSkeleton />
-          <BlogSkeleton />
-          </div>
-          
-        </div>
-      </div>
-    }
-  
 
   return (
     <div
@@ -251,37 +263,61 @@ export const Blogs = () => {
        <Appbar />
       <div className="flex justify-center px-4 py-6 sm:px-6 sm:py-8">
         <div className="w-full max-w-screen-md space-y-4">
-        {blogs.map(blog => {
-          const themeBackground = getThemePalette(blog.author.themeKey).softBg;
-          return (
-            <div key={blog.id} data-blog-card="true" data-theme-bg={themeBackground}>
-              <BlogCard
-               id={blog.id}
-               authorname ={blog.author.name || "Anonymous"}
-               title={blog.title}
-               content={blog.content}
-               imageUrl={blog.imageUrl || undefined}
-               likeCount={blog.likeCount || 0}
-               likedByMe={Boolean(blog.likedByMe)}
-               publishedDate={formatPostedTime(blog.createdAt)}
-               commentCount={blog.commentCount || 0}
-               topComments={blog.topComments || []}
-               themeKey={blog.author.themeKey || undefined}
-               authorProfilePictureUrl={blog.author.profilePictureUrl || undefined} />
-            </div>
-          );
-        }) }
+        <UsersStrip
+          users={users}
+          loading={loadingUsers}
+          selectedAuthorId={selectedAuthorId}
+          onSelect={handleSelectAuthor}
+        />
+        {loading ? (
+          <>
+            <BlogSkeleton />
+            <BlogSkeleton />
+            <BlogSkeleton />
+            <BlogSkeleton />
+            <BlogSkeleton />
+            <BlogSkeleton />
+            <BlogSkeleton />
+            <BlogSkeleton />
+          </>
+        ) : blogs.length === 0 && emptyAuthorMessage ? (
+          <div className="rounded-xl bg-white p-8 text-center shadow-sm">
+            <div className="text-base font-medium text-slate-700">{emptyAuthorMessage}</div>
+            <div className="mt-2 text-sm text-slate-500">Maybe nudge them to start writing?</div>
+          </div>
+        ) : (
+          blogs.map(blog => {
+            const themeBackground = getThemePalette(blog.author.themeKey).softBg;
+            return (
+              <div key={blog.id} data-blog-card="true" data-theme-bg={themeBackground}>
+                <BlogCard
+                 id={blog.id}
+                 authorname ={blog.author.name || "Anonymous"}
+                 title={blog.title}
+                 content={blog.content}
+                 imageUrl={blog.imageUrl || undefined}
+                 likeCount={blog.likeCount || 0}
+                 likedByMe={Boolean(blog.likedByMe)}
+                 publishedDate={formatPostedTime(blog.createdAt)}
+                 commentCount={blog.commentCount || 0}
+                 topComments={blog.topComments || []}
+                 themeKey={blog.author.themeKey || undefined}
+                 authorProfilePictureUrl={blog.author.profilePictureUrl || undefined} />
+              </div>
+            );
+          })
+        )}
         {loadingMore ? (
           <>
             <BlogSkeleton />
             <BlogSkeleton />
           </>
         ) : null}
-        {hasMore ? <div ref={loadMoreRef} className="h-2 w-full" /> : null}
-       
+        {hasMore && !loading ? <div ref={loadMoreRef} className="h-2 w-full" /> : null}
+
       </div>
       </div>
     </div>
-    
+
   )
 }

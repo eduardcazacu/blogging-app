@@ -512,18 +512,24 @@ blogRouter.post('/:id/comments/:commentId/likes/toggle', async (c) => {
     blogRouter.get('/bulk',async (c) => {
         const rawCursor = c.req.query("cursor");
         const rawLimit = c.req.query("limit");
+        const rawAuthorId = c.req.query("authorId");
         const parsedCursor = rawCursor ? Number(rawCursor) : undefined;
         const parsedLimit = rawLimit ? Number(rawLimit) : 10;
+        const parsedAuthorId = rawAuthorId ? Number(rawAuthorId) : undefined;
         const limit = Number.isFinite(parsedLimit)
           ? Math.max(1, Math.min(25, parsedLimit))
           : 10;
         const cursor = Number.isFinite(parsedCursor) ? parsedCursor : undefined;
+        const filterAuthorId = Number.isFinite(parsedAuthorId) ? parsedAuthorId : undefined;
 
         const userId = c.get("userId");
         const { databaseUrl, r2PublicBaseUrl } = getConfig(c);
         const prisma = getPrismaClient(databaseUrl);
         const blogRows = await prisma.post.findMany({
-          where: cursor ? { id: { lt: cursor } } : undefined,
+          where: {
+            ...(cursor ? { id: { lt: cursor } } : {}),
+            ...(filterAuthorId !== undefined ? { authorId: filterAuthorId } : {}),
+          },
           take: limit + 1,
           orderBy: {
             id: "desc",
