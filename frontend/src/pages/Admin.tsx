@@ -20,6 +20,12 @@ type EmailRecipient = {
   name: string | null;
 };
 
+type AppStats = {
+  totalUsers: number;
+  totalPosts: number;
+  monthlyActiveUsers: number;
+};
+
 export const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
@@ -38,6 +44,9 @@ export const Admin = () => {
   const [showRecipients, setShowRecipients] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
+  const [stats, setStats] = useState<AppStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   async function loadPendingUsers() {
     setLoading(true);
@@ -62,6 +71,32 @@ export const Admin = () => {
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadStats() {
+    setStatsLoading(true);
+    setStatsError(null);
+    try {
+      const response = await axios.get(`${BACKEND_URL}/api/v1/admin/stats`, {
+        headers: {
+          Authorization: getAuthHeader(),
+        },
+      });
+      setStats(response.data?.stats ?? null);
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        if (isAuthErrorStatus(e.response?.status)) {
+          clearAuthStorage();
+          setAuthExpired(true);
+          return;
+        }
+        setStatsError(e.response?.data?.msg || "Failed to load stats");
+      } else {
+        setStatsError("Failed to load stats");
+      }
+    } finally {
+      setStatsLoading(false);
     }
   }
 
@@ -92,6 +127,7 @@ export const Admin = () => {
   }
 
   useEffect(() => {
+    loadStats();
     loadPendingUsers();
     loadEmailRecipients();
   }, []);
@@ -244,7 +280,10 @@ export const Admin = () => {
             <h1 className="text-2xl font-bold">Admin Console</h1>
             <button
               type="button"
-              onClick={loadPendingUsers}
+              onClick={() => {
+                loadStats();
+                loadPendingUsers();
+              }}
               className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
             >
               Refresh
@@ -253,6 +292,34 @@ export const Admin = () => {
 
           {loading ? <p className="pt-4 text-slate-600">Loading pending accounts...</p> : null}
           {error ? <p className="pt-4 text-red-600">{error}</p> : null}
+
+          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5">
+            <div className="text-lg font-semibold text-slate-900">App Stats</div>
+            <p className="mt-1 text-sm text-slate-600">
+              Monthly active users counts anyone who posted, commented, or liked in the last 30 days.
+            </p>
+            {statsError ? (
+              <p className="mt-3 text-sm text-red-600">{statsError}</p>
+            ) : (
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                  { label: "Users", value: stats?.totalUsers },
+                  { label: "Posts", value: stats?.totalPosts },
+                  { label: "Monthly active users", value: stats?.monthlyActiveUsers },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="rounded-lg border border-slate-200 bg-white p-4"
+                  >
+                    <div className="text-2xl font-bold text-slate-900">
+                      {statsLoading || stats === null ? "—" : stat.value?.toLocaleString()}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">{stat.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5">
             <div className="text-lg font-semibold text-slate-900">Push Broadcast</div>

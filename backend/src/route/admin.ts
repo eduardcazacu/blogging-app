@@ -86,6 +86,66 @@ adminRouter.use("/*", async (c, next) => {
   }
 });
 
+adminRouter.get("/stats", async (c) => {
+  try {
+    const { databaseUrl } = getConfig(c);
+    const prisma = getPrismaClient(databaseUrl);
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      totalUsers,
+      totalPosts,
+      postAuthors,
+      commentAuthors,
+      postLikers,
+      commentLikers,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.post.count(),
+      prisma.post.findMany({
+        where: { createdAt: { gte: since } },
+        select: { authorId: true },
+        distinct: ["authorId"],
+      }),
+      prisma.comment.findMany({
+        where: { createdAt: { gte: since } },
+        select: { authorId: true },
+        distinct: ["authorId"],
+      }),
+      prisma.postLike.findMany({
+        where: { createdAt: { gte: since } },
+        select: { userId: true },
+        distinct: ["userId"],
+      }),
+      prisma.commentLike.findMany({
+        where: { createdAt: { gte: since } },
+        select: { userId: true },
+        distinct: ["userId"],
+      }),
+    ]);
+
+    // A user is "monthly active" if they posted, commented, or liked anything
+    // (post or comment) within the last 30 days.
+    const activeUserIds = new Set<number>();
+    for (const row of postAuthors) activeUserIds.add(row.authorId);
+    for (const row of commentAuthors) activeUserIds.add(row.authorId);
+    for (const row of postLikers) activeUserIds.add(row.userId);
+    for (const row of commentLikers) activeUserIds.add(row.userId);
+
+    return c.json({
+      stats: {
+        totalUsers,
+        totalPosts,
+        monthlyActiveUsers: activeUserIds.size,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    c.status(500);
+    return c.json({ msg: "Failed to load stats" });
+  }
+});
+
 adminRouter.get("/pending-users", async (c) => {
   try {
     const { databaseUrl } = getConfig(c);
