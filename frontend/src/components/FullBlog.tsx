@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Blog } from "../hooks";
 import { Appbar } from "./Appbar";
 import { Avatar } from "./BlogCard";
+import { MentionInput } from "./MentionInput";
 import { BACKEND_URL } from "../config";
 import { getAuthHeader, getCurrentUserId } from "../lib/auth";
 import { formatPostedTime } from "../lib/datetime";
@@ -62,6 +63,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
   const [postEditSaving, setPostEditSaving] = useState(false);
   const [postEditError, setPostEditError] = useState<string | null>(null);
   const [commentInput, setCommentInput] = useState("");
+  const [commentMentions, setCommentMentions] = useState<{ id: number; name: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
@@ -95,10 +97,18 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
     }
     setSubmitting(true);
     setCommentError(null);
+    // Only keep mentions whose "@Name" token still appears in the final text.
+    const mentionedUserIds = Array.from(
+      new Set(
+        commentMentions
+          .filter((mention) => content.includes(`@${mention.name}`))
+          .map((mention) => mention.id)
+      )
+    );
     try {
       const response = await axios.post(
         `${BACKEND_URL}/api/v1/blog/${blog.id}/comments`,
-        { content },
+        { content, mentionedUserIds },
         {
           headers: {
             Authorization: getAuthHeader(),
@@ -114,6 +124,7 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
         }]);
       }
       setCommentInput("");
+      setCommentMentions([]);
     } catch (e) {
       if (axios.isAxiosError(e)) {
         setCommentError(e.response?.data?.msg || "Failed to post comment.");
@@ -393,12 +404,20 @@ export const FullBlog = ({ blog }: { blog: Blog }) => {
           <div id="comments" className="border-t border-slate-300 pt-5 sm:pt-6">
             <div className="text-lg font-semibold">Comments</div>
             <div className="mt-3">
-              <textarea
+              <MentionInput
                 value={commentInput}
-                onChange={(e) => setCommentInput(e.target.value)}
+                onChange={setCommentInput}
+                onMention={(user) =>
+                  setCommentMentions((existing) =>
+                    existing.some((mention) => mention.id === user.id)
+                      ? existing
+                      : [...existing, user]
+                  )
+                }
+                excludeUserId={currentUserId}
                 rows={3}
                 className="block w-full rounded-lg border border-gray-300 bg-white p-3 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Write a comment..."
+                placeholder="Write a comment... type @ to mention someone"
               />
               {commentError ? (
                 <div className="pt-2 text-sm text-red-600">{commentError}</div>

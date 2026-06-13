@@ -42,6 +42,16 @@ type PostReplyNotificationInput = {
   vapidConfig: VapidConfig;
 };
 
+type MentionNotificationInput = {
+  databaseUrl: string;
+  postId: number;
+  postTitle: string;
+  commentId: number;
+  commenterName: string;
+  mentionedUserIds: number[];
+  vapidConfig: VapidConfig;
+};
+
 type PushDeliverySuccess = {
   subscriptionId: number;
   endpoint: string;
@@ -153,6 +163,17 @@ function buildPostReplyPayload(postId: number, commentAuthorName: string, postTi
     data: {
       postId,
       openUrl: `/blog/${postId}`,
+    },
+  });
+}
+
+function buildMentionPayload(postId: number, commenterName: string, postTitle: string) {
+  return JSON.stringify({
+    title: `${commenterName} mentioned you`,
+    body: postTitle.trim() || "Open the post to read the comment.",
+    data: {
+      postId,
+      openUrl: `/blog/${postId}#comments`,
     },
   });
 }
@@ -709,5 +730,146 @@ export async function notifyPostAuthorOfReply(input: PostReplyNotificationInput)
     }
   } catch (error) {
     console.error("Failed to send push notification for post reply.", error);
+  }
+}
+
+export async function notifyMentionedUsers(input: MentionNotificationInput) {
+  if (!input.vapidConfig.vapidPublicKey || !input.vapidConfig.vapidPrivateKey) {
+    console.warn("[push] skipping mention notification because VAPID config is missing", {
+      postId: input.postId,
+      commentId: input.commentId,
+      mentionedUserCount: input.mentionedUserIds.length,
+      hasPublicKey: Boolean(input.vapidConfig.vapidPublicKey),
+      hasPrivateKey: Boolean(input.vapidConfig.vapidPrivateKey),
+      hasSubject: Boolean(input.vapidConfig.vapidSubject),
+    });
+    return;
+  }
+
+  if (input.mentionedUserIds.length === 0) {
+    return;
+  }
+
+  try {
+    const prisma = getPrismaClient(input.databaseUrl);
+    const recipients = await prisma.user.findMany({
+      where: {
+        id: {
+          in: input.mentionedUserIds,
+        },
+        notificationsEnabled: true,
+        pushSubscriptions: {
+          some: {},
+        },
+      },
+      select: {
+        pushSubscriptions: {
+          select: {
+            id: true,
+            endpoint: true,
+            p256dh: true,
+            auth: true,
+          },
+        },
+      },
+    });
+
+    const subscriptions = recipients.flatMap((user) => user.pushSubscriptions);
+    console.log("[push] resolved recipients for mention notification", {
+      postId: input.postId,
+      commentId: input.commentId,
+      mentionedUserCount: input.mentionedUserIds.length,
+      recipientCount: recipients.length,
+      subscriptionCount: subscriptions.length,
+    });
+
+    if (subscriptions.length === 0) {
+      return;
+    }
+
+    webPush.setVapidDetails(
+      getVapidSubject(input.vapidConfig),
+      input.vapidConfig.vapidPublicKey,
+      input.vapidConfig.vapidPrivateKey
+    );
+
+    const payload = buildMentionPayload(
+      input.postId,
+      input.commenterName.trim() || "Someone",
+      input.postTitle
+    );
+    const sendJobs = subscriptions.map((subscription) => {
+      const pushSubscription = {
+        endpoint: subscription.endpoint,
+        keys: {
+          p256dh: subscription.p256dh,
+          auth: subscription.auth,
+        },
+      };
+      return webPush.sendNotification(
+        pushSubscription,
+        payload,
+        getPushDeliveryOptions(`mention-${input.commentId}`)
+      ).then(() => ({
+        subscriptionId: subscription.id,
+        endpoint: summarizeSubscriptionEndpoint(subscription.endpoint),
+        statusCode: null as number | null,
+        success: true as const,
+      })).catch((error: unknown) => ({
+        subscriptionId: subscription.id,
+        endpoint: summarizeSubscriptionEndpoint(subscription.endpoint),
+        statusCode: getPushStatusCode(error),
+        errorMessage: getPushErrorMessage(error),
+        success: false as const,
+      }));
+    });
+
+    const responses = await Promise.allSettled(sendJobs);
+    const deliveryResults = flattenSettledDeliveryResults(responses);
+    const deliveredCount = deliveryResults.filter((result) => result.success).length;
+    const failedResults = deliveryResults.filter((result) => !result.success);
+
+    console.log("[push] completed mention notification delivery", {
+      postId: input.postId,
+      commentId: input.commentId,
+      attempted: deliveryResults.length,
+      delivered: deliveredCount,
+      failed: failedResults.length,
+      failures: failedResults.map((result) => ({
+        subscriptionId: result.subscriptionId,
+        endpoint: result.endpoint,
+        statusCode: result.statusCode,
+        errorMessage: result.errorMessage,
+      })),
+    });
+
+    const invalidSubscriptionIds = responses.flatMap((response) => {
+      if (response.status === "rejected") {
+        return [];
+      }
+      if (!response.value.success) {
+        return response.value.statusCode === 404 || response.value.statusCode === 410
+          ? [response.value.subscriptionId]
+          : [];
+      }
+      return [];
+    });
+
+    if (invalidSubscriptionIds.length > 0) {
+      console.warn("[push] removing invalid subscriptions after mention notification", {
+        postId: input.postId,
+        commentId: input.commentId,
+        invalidSubscriptionIds,
+      });
+      await prisma.userPushSubscription.deleteMany({
+        where: {
+          id: {
+            in: invalidSubscriptionIds,
+          },
+        },
+      });
+    }
+  } catch (error) {
+    console.error("Failed to send push notifications for mentions.", error);
   }
 }

@@ -1,11 +1,47 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { Prisma } from "@prisma/client";
 import { verify } from 'hono/jwt'
 import { createBlogInput, updateBlogInput } from "@blogging-app/common";
 import z from "zod";
 import { getConfig } from "../env";
 import { getPrismaClient } from "../prisma";
-import { notifyFollowersOfNewPost, notifyPostAuthorOfReply } from "../push";
+import { notifyFollowersOfNewPost, notifyPostAuthorOfReply, notifyMentionedUsers } from "../push";
+
+const MAX_MENTIONS_PER_COMMENT = 10;
+
+// Schedule fire-and-forget background work. On Cloudflare Workers this defers via
+// executionCtx.waitUntil; on the Node dev runtime accessing executionCtx throws, so
+// we fall back to a detached promise.
+function scheduleBackgroundWork(c: Context<any>, work: Promise<unknown>) {
+  try {
+    if (c.executionCtx?.waitUntil) {
+      c.executionCtx.waitUntil(work);
+      return;
+    }
+  } catch {
+    // No ExecutionContext (Node runtime).
+  }
+  void work.catch((e) => console.error(e));
+}
+
+// Defensively normalize a client-supplied mentionedUserIds payload into a
+// deduped list of positive integers, capped to a sane maximum.
+function parseMentionedUserIds(raw: unknown): number[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const ids: number[] = [];
+  for (const value of raw) {
+    const id = Number(value);
+    if (Number.isInteger(id) && id > 0 && !ids.includes(id)) {
+      ids.push(id);
+    }
+    if (ids.length >= MAX_MENTIONS_PER_COMMENT) {
+      break;
+    }
+  }
+  return ids;
+}
 
 export const blogRouter = new Hono<{
 	Bindings: {
@@ -183,6 +219,7 @@ blogRouter.post('/:id/comments', async (c) => {
           },
         },
       });
+      const vapidConfig = { vapidPublicKey, vapidPrivateKey, vapidSubject };
       const replyNotificationJob = notifyPostAuthorOfReply({
         databaseUrl,
         postId: post.id,
@@ -191,13 +228,50 @@ blogRouter.post('/:id/comments', async (c) => {
         commentId: comment.id,
         commentAuthorId: authorId,
         commentAuthorName: comment.author.name?.trim() || "Someone",
-        vapidConfig: {
-          vapidPublicKey,
-          vapidPrivateKey,
-          vapidSubject,
-        },
+        vapidConfig,
       });
-      c.executionCtx.waitUntil(replyNotificationJob);
+      scheduleBackgroundWork(c, replyNotificationJob);
+
+      // Resolve @mentions: only notify users actually referenced as "@name" in the
+      // text, excluding the comment author (self) and the post author (who already
+      // gets the reply push) so nobody is double-notified.
+      const requestedMentionIds = parseMentionedUserIds(body?.mentionedUserIds);
+      if (requestedMentionIds.length > 0) {
+        const candidates = await prisma.user.findMany({
+          where: {
+            id: { in: requestedMentionIds },
+            status: "approved",
+            emailVerifiedAt: { not: null },
+          },
+          select: { id: true, name: true },
+        });
+        const mentionedUserIds = candidates
+          .filter(
+            (user) =>
+              user.id !== authorId &&
+              user.id !== post.authorId &&
+              typeof user.name === "string" &&
+              user.name.trim().length > 0 &&
+              content.includes(`@${user.name}`)
+          )
+          .map((user) => user.id);
+
+        if (mentionedUserIds.length > 0) {
+          scheduleBackgroundWork(
+            c,
+            notifyMentionedUsers({
+              databaseUrl,
+              postId: post.id,
+              postTitle: post.title,
+              commentId: comment.id,
+              commenterName: comment.author.name?.trim() || "Someone",
+              mentionedUserIds,
+              vapidConfig,
+            })
+          );
+        }
+      }
+
       return c.json({
         comment: {
           id: comment.id,
