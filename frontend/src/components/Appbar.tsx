@@ -53,6 +53,27 @@ export const Appbar = () => {
       </button>
 
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event("toggle-chat"))}
+          className="rounded-full p-2 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2"
+          style={{ outlineColor: currentTheme.accent }}
+          aria-label="Open chat"
+          title="Lounge Chat"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-5 w-5 sm:h-6 sm:w-6"
+          >
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+        </button>
         <Link to={"/publish"}>
           <button
             type="button"

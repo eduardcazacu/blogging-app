@@ -117,6 +117,158 @@ export const useUsers = () => {
     return { loading, users, authExpired };
 };
 
+export interface ChatMessage {
+    id: number;
+    content: string;
+    createdAt: string;
+    author: {
+        id: number;
+        name: string | null;
+        themeKey: string | null;
+        profilePictureUrl: string | null;
+    };
+}
+
+export const useChat = (open: boolean) => {
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [sending, setSending] = useState(false);
+    const [retentionHours, setRetentionHours] = useState(24);
+    const [authExpired, setAuthExpired] = useState(false);
+    const lastIdRef = useRef(0);
+
+    const handleAuthError = useCallback((error: unknown) => {
+        if (
+            axios.isAxiosError(error) &&
+            (error.response?.status === 401 || error.response?.status === 403)
+        ) {
+            clearAuthStorage();
+            setAuthExpired(true);
+            return true;
+        }
+        return false;
+    }, []);
+
+    const mergeMessages = useCallback((incoming: ChatMessage[]) => {
+        if (incoming.length === 0) {
+            return;
+        }
+        setMessages((prev) => {
+            const seen = new Set(prev.map((m) => m.id));
+            const next = [...prev];
+            for (const msg of incoming) {
+                if (!seen.has(msg.id)) {
+                    next.push(msg);
+                }
+            }
+            return next;
+        });
+        lastIdRef.current = incoming.reduce(
+            (acc, m) => Math.max(acc, m.id),
+            lastIdRef.current
+        );
+    }, []);
+
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+        let cancelled = false;
+
+        const fetchMessages = async (initial: boolean) => {
+            if (!initial && document.visibilityState !== "visible") {
+                return;
+            }
+            if (initial) {
+                setLoading(true);
+                lastIdRef.current = 0;
+                setMessages([]);
+            }
+            try {
+                const response = await axios.get(`${BACKEND_URL}/api/v1/chat/messages`, {
+                    headers: { Authorization: getAuthHeader() },
+                    params: initial ? {} : { since: lastIdRef.current },
+                });
+                if (cancelled) {
+                    return;
+                }
+                if (typeof response.data?.retentionHours === "number") {
+                    setRetentionHours(response.data.retentionHours);
+                }
+                mergeMessages((response.data?.messages ?? []) as ChatMessage[]);
+            } catch (error: unknown) {
+                if (!cancelled) {
+                    handleAuthError(error);
+                }
+            } finally {
+                if (initial && !cancelled) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        void fetchMessages(true);
+        const timer = setInterval(() => {
+            void fetchMessages(false);
+        }, 3000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [open, mergeMessages, handleAuthError]);
+
+    const sendMessage = useCallback(
+        async (content: string) => {
+            const trimmed = content.trim();
+            if (!trimmed) {
+                return false;
+            }
+            setSending(true);
+            try {
+                const response = await axios.post(
+                    `${BACKEND_URL}/api/v1/chat/messages`,
+                    { content: trimmed },
+                    { headers: { Authorization: getAuthHeader() } }
+                );
+                const message = response.data?.message as ChatMessage | undefined;
+                if (message) {
+                    mergeMessages([message]);
+                }
+                return true;
+            } catch (error: unknown) {
+                handleAuthError(error);
+                return false;
+            } finally {
+                setSending(false);
+            }
+        },
+        [mergeMessages, handleAuthError]
+    );
+
+    const updateSettings = useCallback(async (hours: number) => {
+        const response = await axios.put(
+            `${BACKEND_URL}/api/v1/chat/settings`,
+            { retentionHours: hours },
+            { headers: { Authorization: getAuthHeader() } }
+        );
+        if (typeof response.data?.retentionHours === "number") {
+            setRetentionHours(response.data.retentionHours);
+        }
+        return response.data?.retentionHours as number | undefined;
+    }, []);
+
+    return {
+        messages,
+        loading,
+        sending,
+        retentionHours,
+        authExpired,
+        sendMessage,
+        updateSettings,
+    };
+};
+
 export const useBlogs = (initialPages = 1, authorId: number | null = null) =>{
     const PAGE_SIZE = 10;
     const [loading, setLoading] = useState(true);

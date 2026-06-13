@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { userRouter } from './route/user'
 import { blogRouter } from './route/blog'
 import { adminRouter } from './route/admin'
+import { chatRouter } from './route/chat'
 import { cors } from 'hono/cors'
 
 // Create the main Hono app
@@ -48,6 +49,7 @@ app.use('/*', (c, next) => {
 app.route("api/v1/user", userRouter)
 app.route("api/v1/blog", blogRouter)
 app.route("api/v1/admin", adminRouter)
+app.route("api/v1/chat", chatRouter)
 
 app.use('/message/*', async (c, next) => {
   await next()

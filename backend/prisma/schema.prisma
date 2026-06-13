@@ -31,6 +31,7 @@ model User {
   commentLikes CommentLike[]
   sessions   Session[]
   pushSubscriptions UserPushSubscription[]
+  chatMessages ChatMessage[] @relation("ChatAuthor")
 
   @@map("users")
 }
@@ -119,4 +120,24 @@ model Session {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  content   String
+  authorId  Int      @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  author    User     @relation("ChatAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+model ChatSetting {
+  id             Int      @id @default(1)
+  retentionHours Int      @default(24) @map("retention_hours")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("chat_settings")
 }

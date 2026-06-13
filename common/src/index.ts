@@ -59,4 +59,16 @@ export const updateBlogInput = z.object({
     id: z.number(),
 })
 
-export type UpdateBlogInput = z.infer<typeof updateBlogInput>    
+export type UpdateBlogInput = z.infer<typeof updateBlogInput>
+
+export const createChatMessageInput = z.object({
+    content: z.string().trim().min(1).max(1000),
+})
+
+export type CreateChatMessageInput = z.infer<typeof createChatMessageInput>
+
+export const chatSettingsInput = z.object({
+    retentionHours: z.number().int().min(1).max(720), // 1h .. 30d
+})
+
+export type ChatSettingsInput = z.infer<typeof chatSettingsInput>

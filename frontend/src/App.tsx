@@ -13,6 +13,7 @@ import { ResetPassword } from './pages/ResetPassword'
 import { getAuthHeader, refreshAccessToken } from './lib/auth'
 import { enablePushIfPermissionGranted } from './lib/push'
 import { NotificationPrompt } from './components/NotificationPrompt'
+import { ChatDrawer } from './components/ChatDrawer'
 
 function RootRedirect() {
   const [targetPath, setTargetPath] = useState<string | null>(null);
@@ -96,6 +97,7 @@ function App() {
           <Route path="/verify-email" element={<VerifyEmail />} />
         </Routes>
         <NotificationPrompt />
+        <ChatDrawer />
       </BrowserRouter>
     </>
   )
